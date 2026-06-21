@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native'
-import MapView, { Polyline, PROVIDER_GOOGLE } from 'react-native-maps'
 import { trackingService, TrackStats, TrackPoint } from '../services/trackingService'
 import { bleService, BleReadings } from '../services/bleService'
 import { saveRideLocally, syncPendingRides } from '../services/offlineStore'
@@ -30,7 +29,7 @@ export default function TrackingScreen({ route, navigation }: any) {
   const [stats, setStats] = useState<TrackStats | null>(null)
   const [points, setPoints] = useState<TrackPoint[]>([])
   const [ble, setBle] = useState<BleReadings>({ bpm: null, watts: null, cadenceRpm: null })
-  const mapRef = useRef<MapView>(null)
+  const mapRef = useRef<null>(null)
 
   useEffect(() => {
     // Brancher les lectures BLE sur le service de tracking
@@ -48,10 +47,7 @@ export default function TrackingScreen({ route, navigation }: any) {
       setStats(newStats)
       setPoints([...newPoints])
       // Recentrer la carte sur la dernière position
-      if (newPoints.length > 0 && mapRef.current) {
-        const last = newPoints[newPoints.length - 1]
-        mapRef.current.animateCamera({ center: { latitude: last.lat, longitude: last.lng } }, { duration: 500 })
-      }
+      // carte désactivée en Expo Go (react-native-maps nécessite un dev build)
     })
     setStatus('running')
   }
@@ -95,26 +91,20 @@ export default function TrackingScreen({ route, navigation }: any) {
     ])
   }
 
-  const coords = points.map(p => ({ latitude: p.lat, longitude: p.lng }))
   const lastPoint = points[points.length - 1]
 
   return (
     <View style={s.container}>
-      {/* Carte */}
-      <MapView
-        ref={mapRef}
-        style={s.map}
-        provider={PROVIDER_GOOGLE}
-        showsUserLocation
-        initialRegion={lastPoint ? {
-          latitude: lastPoint.lat, longitude: lastPoint.lng,
-          latitudeDelta: 0.01, longitudeDelta: 0.01,
-        } : undefined}
-      >
-        {coords.length > 1 && (
-          <Polyline coordinates={coords} strokeColor="#2563eb" strokeWidth={4} />
+      {/* Carte — placeholder Expo Go, disponible en dev build */}
+      <View style={s.map}>
+        <Text style={s.mapPlaceholder}>🗺️ Carte disponible en dev build</Text>
+        {lastPoint && (
+          <Text style={s.mapCoords}>
+            {lastPoint.lat.toFixed(5)}, {lastPoint.lng.toFixed(5)}
+          </Text>
         )}
-      </MapView>
+        <Text style={s.mapPoints}>{points.length} points GPS enregistrés</Text>
+      </View>
 
       {/* Stats panel */}
       <ScrollView style={s.panel} contentContainerStyle={s.panelContent}>
@@ -171,7 +161,10 @@ export default function TrackingScreen({ route, navigation }: any) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  map: { flex: 1 },
+  map: { flex: 1, backgroundColor: '#e8f0fe', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  mapPlaceholder: { fontSize: 20, color: '#4b5563' },
+  mapCoords: { fontSize: 12, color: '#6b7280', fontFamily: 'monospace' },
+  mapPoints: { fontSize: 12, color: '#9ca3af' },
   panel: { maxHeight: 320 },
   panelContent: { padding: 16 },
   timer: { fontSize: 48, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: '#111', marginBottom: 16 },
