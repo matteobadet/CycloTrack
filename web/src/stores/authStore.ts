@@ -6,6 +6,8 @@ interface AuthUser {
   email: string
   pseudo: string
   role: string
+  heightCm?: number | null
+  weightKg?: number | null
 }
 
 interface AuthState {
