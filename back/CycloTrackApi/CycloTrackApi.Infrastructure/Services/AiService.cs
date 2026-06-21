@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace CycloTrackApi.Infrastructure.Services;
 
-public class AiService(IHttpClientFactory httpClientFactory, IConfiguration config) : IAiService
+public class AiService(IHttpClientFactory httpClientFactory) : IAiService
 {
     public async Task<string> AnalyzeRideAsync(Ride ride, User user)
     {

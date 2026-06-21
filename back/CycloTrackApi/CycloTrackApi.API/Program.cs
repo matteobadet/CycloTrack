@@ -2,6 +2,7 @@ using System.Text;
 using CycloTrackApi.API.Options;
 using CycloTrackApi.Infrastructure.Data;
 using CycloTrackApi.Infrastructure.Services;
+using CycloTrackApi.Infrastructure.Repositories;
 using CycloTrackApi.Core.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,9 @@ builder.Services.AddHttpClient("Anthropic", client =>
 
 // Application services
 builder.Services.AddScoped<IAiService, AiService>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRideRepository, RideRepository>();
+builder.Services.AddScoped<IGoalRepository, GoalRepository>();
 
 // Controllers + Swagger
 builder.Services.AddControllers();
