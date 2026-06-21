@@ -1,13 +1,18 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "CycloTrack",
+    "slug": "cyclotrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "CycloTrack utilise votre position GPS pour enregistrer votre parcours.",
+        "NSLocationAlwaysUsageDescription": "CycloTrack utilise votre position GPS en arrière-plan pendant la sortie.",
+        "NSBluetoothAlwaysUsageDescription": "CycloTrack utilise le Bluetooth pour se connecter à vos capteurs de puissance et de fréquence cardiaque."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,10 +21,27 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "BLUETOOTH",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "FOREGROUND_SERVICE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "CycloTrack utilise votre position GPS pour enregistrer votre parcours vélo."
+        }
+      ]
+    ]
   }
 }
