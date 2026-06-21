@@ -1,0 +1,24 @@
+# Node / React Native
+node_modules/
+.expo/
+dist/
+build/
+*.log
+
+# ASP.NET Core
+bin/
+obj/
+*.user
+*.suo
+.vs/
+appsettings.*.json
+!appsettings.json
+
+# Env & secrets
+.env
+.env.local
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
