@@ -1,0 +1,53 @@
+services:
+
+  postgres-cyclo:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cyclotrack
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-cyclo-data:/var/lib/postgresql/data
+    networks:
+      - cyclotrack-net
+    restart: unless-stopped
+
+  cyclo-api:
+    build:
+      context: ./back/CycloTrackApi
+      dockerfile: CycloTrackApi.API/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres-cyclo;Database=cyclotrack;Username=postgres;Password=${POSTGRES_PASSWORD}
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: cyclotrack-api
+      Jwt__Audience: cyclotrack-app
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+    ports:
+      - "5002:8080"
+    depends_on:
+      - postgres-cyclo
+    networks:
+      - cyclotrack-net
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:82/cyclo-api}
+    ports:
+      - "82:80"
+    depends_on:
+      - cyclo-api
+    networks:
+      - cyclotrack-net
+    restart: unless-stopped
+
+volumes:
+  postgres-cyclo-data:
+
+networks:
+  cyclotrack-net:
+    driver: bridge
