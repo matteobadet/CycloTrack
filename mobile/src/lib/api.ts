@@ -2,7 +2,9 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 
 // En dev, pointer vers l'API en local. En prod Docker, remplacer par l'IP du serveur.
-export const API_URL = 'http://10.0.2.2:5002' // Android emulator → localhost
+// Sur vrai device : IP de la machine hôte sur le réseau local (même que Metro)
+// Sur émulateur Android : http://10.0.2.2:5002
+export const API_URL = 'http://167.233.129.150:5002'
 
 export const api = axios.create({
   baseURL: API_URL,

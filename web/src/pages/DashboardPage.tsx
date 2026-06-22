@@ -18,7 +18,6 @@ export default function DashboardPage() {
     queryFn: () => api.get('/rides?pageSize=30').then(r => r.data),
   })
 
-  // Préparer données graphiques : 30 dernières sorties dans l'ordre chronologique
   const chartData = [...rides].reverse().map(r => ({
     date: formatDateShort(r.startedAt),
     distance: parseFloat(r.distanceKm.toFixed(1)),
@@ -27,45 +26,25 @@ export default function DashboardPage() {
     elevation: parseFloat(r.elevationGainM.toFixed(0)),
   }))
 
-  if (loadingStats) return <div className="p-8 text-gray-400">Chargement...</div>
+  if (loadingStats) return <div className="p-8 text-gray-400 dark:text-slate-500">Chargement...</div>
 
   return (
     <div className="p-8 space-y-8">
-      <h1 className="text-2xl font-bold">Tableau de bord</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tableau de bord</h1>
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          icon={<Bike size={20} className="text-white" />}
-          label="Sorties totales"
-          value={String(stats?.totalRides ?? 0)}
-          color="bg-blue-500"
-        />
-        <StatCard
-          icon={<TrendingUp size={20} className="text-white" />}
-          label="Distance totale"
-          value={`${((stats?.totalDistanceKm ?? 0)).toFixed(0)} km`}
-          color="bg-green-500"
-        />
-        <StatCard
-          icon={<Mountain size={20} className="text-white" />}
-          label="Dénivelé cumulé"
-          value={`${((stats?.totalElevationM ?? 0)).toFixed(0)} m`}
-          color="bg-orange-500"
-        />
-        <StatCard
-          icon={<Flame size={20} className="text-white" />}
-          label="Calories brûlées"
-          value={`${((stats?.totalCalories ?? 0)).toFixed(0)} kcal`}
-          color="bg-red-500"
-        />
+        <StatCard icon={<Bike size={20} className="text-white" />} label="Sorties totales" value={String(stats?.totalRides ?? 0)} color="bg-blue-500" />
+        <StatCard icon={<TrendingUp size={20} className="text-white" />} label="Distance totale" value={`${((stats?.totalDistanceKm ?? 0)).toFixed(0)} km`} color="bg-green-500" />
+        <StatCard icon={<Mountain size={20} className="text-white" />} label="Dénivelé cumulé" value={`${((stats?.totalElevationM ?? 0)).toFixed(0)} m`} color="bg-orange-500" />
+        <StatCard icon={<Flame size={20} className="text-white" />} label="Calories brûlées" value={`${((stats?.totalCalories ?? 0)).toFixed(0)} kcal`} color="bg-red-500" />
       </div>
 
       {/* Graphiques */}
       {chartData.length > 1 && (
         <div className="grid grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border shadow-sm p-5">
-            <h2 className="font-semibold mb-4 text-gray-700">Distance par sortie (km)</h2>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
+            <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200">Distance par sortie (km)</h2>
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={chartData}>
                 <defs>
@@ -82,8 +61,8 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white rounded-xl border shadow-sm p-5">
-            <h2 className="font-semibold mb-4 text-gray-700">Dénivelé positif par sortie (m)</h2>
+          <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
+            <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200">Dénivelé positif par sortie (m)</h2>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={chartData}>
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} />
@@ -95,8 +74,8 @@ export default function DashboardPage() {
           </div>
 
           {chartData.some(d => d.watts > 0) && (
-            <div className="bg-white rounded-xl border shadow-sm p-5">
-              <h2 className="font-semibold mb-4 text-gray-700">Puissance moyenne (W)</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
+              <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200">Puissance moyenne (W)</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={chartData}>
                   <defs>
@@ -115,8 +94,8 @@ export default function DashboardPage() {
           )}
 
           {chartData.some(d => d.bpm > 0) && (
-            <div className="bg-white rounded-xl border shadow-sm p-5">
-              <h2 className="font-semibold mb-4 text-gray-700">FC moyenne (bpm)</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
+              <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200">FC moyenne (bpm)</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={chartData}>
                   <defs>
@@ -137,17 +116,17 @@ export default function DashboardPage() {
       )}
 
       {/* Dernières sorties */}
-      <div className="bg-white rounded-xl shadow-sm border p-5">
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold">Dernières sorties</h2>
-          <Link to="/rides" className="text-sm text-blue-600 hover:underline">Voir tout</Link>
+          <h2 className="font-semibold text-gray-900 dark:text-white">Dernières sorties</h2>
+          <Link to="/rides" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">Voir tout</Link>
         </div>
         {!stats?.recentRides?.length ? (
-          <p className="text-gray-400 text-sm">Aucune sortie enregistrée.</p>
+          <p className="text-gray-400 dark:text-slate-500 text-sm">Aucune sortie enregistrée.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-400 border-b">
+              <tr className="text-left text-gray-400 dark:text-slate-500 border-b dark:border-slate-700">
                 <th className="pb-2">Date</th>
                 <th className="pb-2">Distance</th>
                 <th className="pb-2">Durée</th>
@@ -157,13 +136,13 @@ export default function DashboardPage() {
             </thead>
             <tbody>
               {stats.recentRides.map(r => (
-                <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50">
-                  <td className="py-2">{new Date(r.startedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</td>
-                  <td className="py-2 font-medium">{r.distanceKm.toFixed(1)} km</td>
-                  <td className="py-2">{formatDuration(r.durationSec)}</td>
-                  <td className="py-2">{r.avgSpeedKmh.toFixed(1)} km/h</td>
+                <tr key={r.id} className="border-b dark:border-slate-700 last:border-0 hover:bg-gray-50 dark:hover:bg-slate-700/50">
+                  <td className="py-2 text-gray-700 dark:text-slate-300">{new Date(r.startedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</td>
+                  <td className="py-2 font-medium text-gray-900 dark:text-white">{r.distanceKm.toFixed(1)} km</td>
+                  <td className="py-2 text-gray-700 dark:text-slate-300">{formatDuration(r.durationSec)}</td>
+                  <td className="py-2 text-gray-700 dark:text-slate-300">{r.avgSpeedKmh.toFixed(1)} km/h</td>
                   <td className="py-2">
-                    <Link to={`/rides/${r.id}`} className="text-blue-600 hover:underline text-xs">Détail →</Link>
+                    <Link to={`/rides/${r.id}`} className="text-blue-600 dark:text-blue-400 hover:underline text-xs">Détail →</Link>
                   </td>
                 </tr>
               ))}

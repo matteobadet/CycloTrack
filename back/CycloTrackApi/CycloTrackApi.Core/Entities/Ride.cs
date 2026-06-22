@@ -32,4 +32,7 @@ public class Ride
     public string? AiAnalysis { get; set; }
 
     public ICollection<RidePoint> Points { get; set; } = [];
+    public ICollection<RideTrack> Tracks { get; set; } = [];
+    public ICollection<Comment> Comments { get; set; } = [];
+    public ICollection<Reaction> Reactions { get; set; } = [];
 }

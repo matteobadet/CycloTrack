@@ -9,6 +9,9 @@ import RideDetailPage from '@/pages/RideDetailPage'
 import GoalsPage from '@/pages/GoalsPage'
 import SocialPage from '@/pages/SocialPage'
 import ProfilePage from '@/pages/ProfilePage'
+import PlanPage from '@/pages/PlanPage'
+import PlansListPage from '@/pages/PlansListPage'
+import PlanDetailPage from '@/pages/PlanDetailPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = useAuthStore(s => s.user)
@@ -27,6 +30,9 @@ export default function App() {
         <Route path="goals" element={<GoalsPage />} />
         <Route path="social" element={<SocialPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="plan" element={<PlanPage />} />
+        <Route path="plans" element={<PlansListPage />} />
+        <Route path="plans/:id" element={<PlanDetailPage />} />
       </Route>
     </Routes>
   )

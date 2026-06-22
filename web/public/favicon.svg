@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+  <!-- Roue arrière -->
+  <circle cx="18" cy="42" r="11" fill="none" stroke="white" stroke-width="3"/>
+  <circle cx="18" cy="42" r="2.5" fill="white"/>
+  <!-- Roue avant -->
+  <circle cx="46" cy="42" r="11" fill="none" stroke="white" stroke-width="3"/>
+  <circle cx="46" cy="42" r="2.5" fill="white"/>
+  <!-- Cadre -->
+  <polyline points="18,42 28,24 38,42" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="28" y1="24" x2="46" y2="42" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="28" y1="24" x2="34" y2="18" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <!-- Guidon -->
+  <line x1="30" y1="18" x2="38" y2="18" stroke="white" stroke-width="3" stroke-linecap="round"/>
+</svg>

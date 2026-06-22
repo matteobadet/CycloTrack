@@ -11,6 +11,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<Follow> Follows => Set<Follow>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<RideTrack> RideTracks => Set<RideTrack>();
+    public DbSet<PlannedRide> PlannedRides => Set<PlannedRide>();
+    public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

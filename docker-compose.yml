@@ -22,9 +22,12 @@ services:
       Jwt__Secret: ${JWT_SECRET}
       Jwt__Issuer: cyclotrack-api
       Jwt__Audience: cyclotrack-app
-      Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+      Groq__ApiKey: ${GROQ_API_KEY}
+      Spotify__ClientId: ${SPOTIFY_CLIENT_ID}
+      Spotify__ClientSecret: ${SPOTIFY_CLIENT_SECRET}
+      Spotify__CallbackUrl: ${SPOTIFY_CALLBACK_URL:-http://167.233.129.150:5002/spotify/callback}
     ports:
-      - "5002:8080"
+      - "${API_PORT:-5002}:8080"
     depends_on:
       - postgres-cyclo
     networks:
@@ -36,9 +39,9 @@ services:
       context: ./web
       dockerfile: Dockerfile
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:82/cyclo-api}
+      VITE_API_URL: ${VITE_API_URL:-http://167.233.129.150/cyclo-api}
     ports:
-      - "82:80"
+      - "${WEB_PORT:-80}:80"
     depends_on:
       - cyclo-api
     networks:

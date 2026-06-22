@@ -22,6 +22,62 @@ namespace CycloTrackApi.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.Comment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RideId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RideId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Comments");
+                });
+
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.Reaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Emoji")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RideId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RideId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Reactions");
+                });
+
             modelBuilder.Entity("CycloTrackApi.Core.Entities.Follow", b =>
                 {
                     b.Property<Guid>("FollowerId")
@@ -78,6 +134,62 @@ namespace CycloTrackApi.Infrastructure.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Goals");
+                });
+
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.PlannedRide", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AiAdvice")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<float>("DistanceKm")
+                        .HasColumnType("real");
+
+                    b.Property<float>("ElevationGainM")
+                        .HasColumnType("real");
+
+                    b.Property<string>("ElevationJson")
+                        .HasColumnType("text");
+
+                    b.Property<float>("ElevationLossM")
+                        .HasColumnType("real");
+
+                    b.Property<int>("EstimatedDurationMin")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GoogleMapsUrl")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("PlannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RoutePolyline")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RouteStepsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PlannedRides");
                 });
 
             modelBuilder.Entity("CycloTrackApi.Core.Entities.RefreshToken", b =>
@@ -218,6 +330,63 @@ namespace CycloTrackApi.Infrastructure.Migrations
                     b.ToTable("RidePoints");
                 });
 
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.RideTrack", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AlbumArtUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ArtistName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Bpm")
+                        .HasColumnType("integer");
+
+                    b.Property<float?>("ElevDeltaM")
+                        .HasColumnType("real");
+
+                    b.Property<float?>("Energy")
+                        .HasColumnType("real");
+
+                    b.Property<DateTime>("PolledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RideId")
+                        .HasColumnType("uuid");
+
+                    b.Property<float?>("SpeedKmh")
+                        .HasColumnType("real");
+
+                    b.Property<string>("SpotifyTrackId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<float?>("Tempo")
+                        .HasColumnType("real");
+
+                    b.Property<string>("TrackName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<float?>("Valence")
+                        .HasColumnType("real");
+
+                    b.Property<float?>("Watts")
+                        .HasColumnType("real");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RideId");
+
+                    b.ToTable("RideTracks");
+                });
+
             modelBuilder.Entity("CycloTrackApi.Core.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -231,7 +400,16 @@ namespace CycloTrackApi.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("Ftp")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Goal")
+                        .HasColumnType("text");
+
                     b.Property<int?>("HeightCm")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MaxHrBpm")
                         .HasColumnType("integer");
 
                     b.Property<string>("PasswordHash")
@@ -246,6 +424,15 @@ namespace CycloTrackApi.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("SpotifyAccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SpotifyRefreshToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SpotifyTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<float?>("WeightKg")
                         .HasColumnType("real");
 
@@ -255,6 +442,42 @@ namespace CycloTrackApi.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.Comment", b =>
+                {
+                    b.HasOne("CycloTrackApi.Core.Entities.Ride", "Ride")
+                        .WithMany("Comments")
+                        .HasForeignKey("RideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CycloTrackApi.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ride");
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.Reaction", b =>
+                {
+                    b.HasOne("CycloTrackApi.Core.Entities.Ride", "Ride")
+                        .WithMany("Reactions")
+                        .HasForeignKey("RideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CycloTrackApi.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ride");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("CycloTrackApi.Core.Entities.Follow", b =>
@@ -280,6 +503,17 @@ namespace CycloTrackApi.Infrastructure.Migrations
                 {
                     b.HasOne("CycloTrackApi.Core.Entities.User", "User")
                         .WithMany("Goals")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.PlannedRide", b =>
+                {
+                    b.HasOne("CycloTrackApi.Core.Entities.User", "User")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -320,9 +554,23 @@ namespace CycloTrackApi.Infrastructure.Migrations
                     b.Navigation("Ride");
                 });
 
+            modelBuilder.Entity("CycloTrackApi.Core.Entities.RideTrack", b =>
+                {
+                    b.HasOne("CycloTrackApi.Core.Entities.Ride", "Ride")
+                        .WithMany("Tracks")
+                        .HasForeignKey("RideId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ride");
+                });
+
             modelBuilder.Entity("CycloTrackApi.Core.Entities.Ride", b =>
                 {
                     b.Navigation("Points");
+                    b.Navigation("Tracks");
+                    b.Navigation("Comments");
+                    b.Navigation("Reactions");
                 });
 
             modelBuilder.Entity("CycloTrackApi.Core.Entities.User", b =>

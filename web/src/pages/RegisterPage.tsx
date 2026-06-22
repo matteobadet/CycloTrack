@@ -26,8 +26,9 @@ export default function RegisterPage() {
         weightKg: form.weightKg ? Number(form.weightKg) : null,
       })
       navigate('/login')
-    } catch {
-      setError('Erreur lors de l\'inscription.')
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      setError(status === 409 ? 'Cet email est déjà utilisé.' : 'Erreur lors de l\'inscription.')
     } finally {
       setLoading(false)
     }

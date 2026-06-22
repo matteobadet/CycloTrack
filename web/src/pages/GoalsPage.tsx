@@ -41,19 +41,19 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: () => void }) {
   const isAchieved = goal.isAchieved || goal.currentValue >= goal.targetValue
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm p-5 ${isAchieved ? 'border-green-200 bg-green-50' : ''}`}>
+    <div className={`rounded-xl border shadow-sm p-5 ${isAchieved ? 'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800' : 'bg-white dark:bg-slate-800 dark:border-slate-700'}`}>
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
             {isAchieved && <Trophy size={16} className="text-yellow-500" />}
-            <p className="font-semibold text-gray-900">{typeInfo.label}</p>
+            <p className="font-semibold text-gray-900 dark:text-slate-100">{typeInfo.label}</p>
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-gray-400 dark:text-slate-400 mt-0.5">
             {PERIODS.find(p => p.value === goal.period)?.label}
             {goal.description && ` — ${goal.description}`}
           </p>
         </div>
-        <button onClick={onDelete} className="text-gray-300 hover:text-red-400 transition-colors">
+        <button onClick={onDelete} className="text-gray-300 dark:text-slate-600 hover:text-red-400 transition-colors">
           <Trash2 size={16} />
         </button>
       </div>
@@ -61,14 +61,14 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: () => void }) {
       {/* Barre de progression */}
       <div className="mb-2">
         <div className="flex justify-between text-sm mb-1">
-          <span className="font-medium text-gray-700">
+          <span className="font-medium text-gray-700 dark:text-slate-300">
             {goal.currentValue.toFixed(goal.type === 'RideCount' ? 0 : 1)} {typeInfo.unit}
           </span>
-          <span className="text-gray-400">
+          <span className="text-gray-400 dark:text-slate-500">
             / {goal.targetValue} {typeInfo.unit}
           </span>
         </div>
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${isAchieved ? 'bg-green-500' : 'bg-blue-500'}`}
             style={{ width: `${progress}%` }}
@@ -76,7 +76,7 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: () => void }) {
         </div>
       </div>
 
-      <p className="text-xs text-right text-gray-400">{progress.toFixed(0)}%</p>
+      <p className="text-xs text-right text-gray-400 dark:text-slate-500">{progress.toFixed(0)}%</p>
     </div>
   )
 }
@@ -132,13 +132,13 @@ export default function GoalsPage() {
 
       {/* Formulaire création */}
       {showForm && (
-        <div className="bg-white rounded-xl border shadow-sm p-5 mb-6 space-y-4">
-          <h2 className="font-semibold">Créer un objectif</h2>
+        <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-xl border shadow-sm p-5 mb-6 space-y-4">
+          <h2 className="font-semibold dark:text-slate-100">Créer un objectif</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-600">Type</label>
+              <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-slate-400">Type</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                 value={form.type}
                 onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
               >
@@ -146,9 +146,9 @@ export default function GoalsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-600">Période</label>
+              <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-slate-400">Période</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                 value={form.period}
                 onChange={e => setForm(f => ({ ...f, period: e.target.value }))}
               >
@@ -156,22 +156,22 @@ export default function GoalsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-600">
+              <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-slate-400">
                 Cible ({GOAL_TYPES.find(t => t.value === form.type)?.unit})
               </label>
               <input
                 type="number"
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                 placeholder="Ex: 500"
                 value={form.targetValue}
                 onChange={e => setForm(f => ({ ...f, targetValue: e.target.value }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-600">Description (optionnel)</label>
+              <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-slate-400">Description (optionnel)</label>
               <input
                 type="text"
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                className="w-full border rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                 placeholder="Ex: Objectif été"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -186,7 +186,7 @@ export default function GoalsPage() {
             >
               {creating ? 'Création...' : 'Créer'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-100">
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
               Annuler
             </button>
           </div>
@@ -205,7 +205,7 @@ export default function GoalsPage() {
         <div className="space-y-6">
           {active.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">En cours</h2>
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">En cours</h2>
               <div className="grid grid-cols-2 gap-4">
                 {active.map(g => <GoalCard key={g.id} goal={g} onDelete={() => deleteGoal(g.id)} />)}
               </div>
@@ -213,7 +213,7 @@ export default function GoalsPage() {
           )}
           {achieved.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Atteints 🏆</h2>
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Atteints 🏆</h2>
               <div className="grid grid-cols-2 gap-4">
                 {achieved.map(g => <GoalCard key={g.id} goal={g} onDelete={() => deleteGoal(g.id)} />)}
               </div>

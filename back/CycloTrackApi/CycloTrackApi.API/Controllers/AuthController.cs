@@ -124,6 +124,9 @@ public class AuthController(
         if (!string.IsNullOrEmpty(req.Pseudo)) user.Pseudo = req.Pseudo;
         if (req.HeightCm.HasValue) user.HeightCm = req.HeightCm;
         if (req.WeightKg.HasValue) user.WeightKg = req.WeightKg;
+        if (req.Ftp.HasValue) user.Ftp = req.Ftp;
+        if (req.MaxHrBpm.HasValue) user.MaxHrBpm = req.MaxHrBpm;
+        if (!string.IsNullOrEmpty(req.Goal)) user.Goal = req.Goal;
         await userRepo.UpdateAsync(user);
         return Ok(ToDto(user));
     }
@@ -161,5 +164,5 @@ public class AuthController(
         return value;
     }
 
-    private static UserDto ToDto(User u) => new(u.Id, u.Email, u.Pseudo, u.Role, u.HeightCm, u.WeightKg);
+    private static UserDto ToDto(User u) => new(u.Id, u.Email, u.Pseudo, u.Role, u.HeightCm, u.WeightKg, u.Ftp, u.MaxHrBpm, u.Goal);
 }

@@ -54,21 +54,25 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// HTTP client for Anthropic
-builder.Services.AddHttpClient("Anthropic", client =>
+// HTTP client for Groq
+builder.Services.AddHttpClient("Groq", client =>
 {
-    client.DefaultRequestHeaders.Add("x-api-key", builder.Configuration["Anthropic:ApiKey"]);
-    client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {builder.Configuration["Groq:ApiKey"]}");
 });
+
+// Generic HTTP client for Spotify and other external calls
+builder.Services.AddHttpClient();
 
 // Application services
 builder.Services.AddScoped<IAiService, AiService>();
+builder.Services.AddScoped<ISpotifyService, SpotifyService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRideRepository, RideRepository>();
 builder.Services.AddScoped<IGoalRepository, GoalRepository>();
 
 // Controllers + Swagger
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

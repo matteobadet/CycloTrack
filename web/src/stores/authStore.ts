@@ -8,6 +8,9 @@ interface AuthUser {
   role: string
   heightCm?: number | null
   weightKg?: number | null
+  ftp?: number | null
+  maxHrBpm?: number | null
+  goal?: string | null
 }
 
 interface AuthState {

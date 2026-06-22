@@ -4,5 +4,5 @@ public record RegisterRequest(string Email, string Pseudo, string Password, int?
 public record LoginRequest(string Email, string Password);
 public record AuthResponse(string AccessToken, UserDto User);
 public record RefreshResponse(string AccessToken);
-public record UserDto(Guid Id, string Email, string Pseudo, string Role, int? HeightCm, float? WeightKg);
-public record UpdateProfileRequest(string? Pseudo, int? HeightCm, float? WeightKg);
+public record UserDto(Guid Id, string Email, string Pseudo, string Role, int? HeightCm, float? WeightKg, int? Ftp, int? MaxHrBpm, string? Goal);
+public record UpdateProfileRequest(string? Pseudo, int? HeightCm, float? WeightKg, int? Ftp, int? MaxHrBpm, string? Goal);

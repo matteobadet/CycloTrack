@@ -1,8 +1,11 @@
 import React, { useState } from 'react'
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native'
+import { Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native'
 import { api } from '../lib/api'
+import { useTheme, Theme } from '../theme'
 
 export default function RegisterScreen({ navigation }: any) {
+  const t = useTheme()
+  const s = styles(t)
   const [form, setForm] = useState({ email: '', pseudo: '', password: '', heightCm: '', weightKg: '' })
   const [loading, setLoading] = useState(false)
 
@@ -26,21 +29,25 @@ export default function RegisterScreen({ navigation }: any) {
     }
   }
 
+  const fields = [
+    { label: 'Email', field: 'email', keyboard: 'email-address' as const },
+    { label: 'Pseudo', field: 'pseudo', keyboard: 'default' as const },
+    { label: 'Mot de passe', field: 'password', keyboard: 'default' as const },
+    { label: 'Taille (cm)', field: 'heightCm', keyboard: 'numeric' as const },
+    { label: 'Poids (kg)', field: 'weightKg', keyboard: 'numeric' as const },
+  ]
+
   return (
     <ScrollView contentContainerStyle={s.container}>
-      <Text style={s.title}>🚴 CycloTrack</Text>
+      <Text style={s.logo}>🚴</Text>
+      <Text style={s.title}>CycloTrack</Text>
       <Text style={s.subtitle}>Créer un compte</Text>
-      {([
-        { label: 'Email', field: 'email', keyboard: 'email-address' as const },
-        { label: 'Pseudo', field: 'pseudo', keyboard: 'default' as const },
-        { label: 'Mot de passe', field: 'password', keyboard: 'default' as const },
-        { label: 'Taille (cm)', field: 'heightCm', keyboard: 'numeric' as const },
-        { label: 'Poids (kg)', field: 'weightKg', keyboard: 'numeric' as const },
-      ]).map(({ label, field, keyboard }) => (
+      {fields.map(({ label, field, keyboard }) => (
         <TextInput
           key={field}
           style={s.input}
           placeholder={label}
+          placeholderTextColor={t.textMuted}
           value={form[field as keyof typeof form]}
           onChangeText={v => set(field, v)}
           keyboardType={keyboard}
@@ -58,12 +65,13 @@ export default function RegisterScreen({ navigation }: any) {
   )
 }
 
-const s = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 20, fontWeight: '600', textAlign: 'center', marginBottom: 32, color: '#555' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 16 },
-  btn: { backgroundColor: '#2563eb', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
+const styles = (t: Theme) => StyleSheet.create({
+  container: { flexGrow: 1, justifyContent: 'center', padding: 24, backgroundColor: t.bg },
+  logo: { fontSize: 52, textAlign: 'center', marginBottom: 4 },
+  title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 4, color: t.text },
+  subtitle: { fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 32, color: t.textSub },
+  input: { borderWidth: 1, borderColor: t.border, borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 16, backgroundColor: t.card, color: t.text },
+  btn: { backgroundColor: t.blue, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
   btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  link: { textAlign: 'center', color: '#2563eb', fontSize: 14 },
+  link: { textAlign: 'center', color: t.blue, fontSize: 14 },
 })
