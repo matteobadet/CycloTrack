@@ -266,6 +266,12 @@ namespace CycloTrackApi.Infrastructure.Migrations
                     b.Property<int?>("FeelBefore")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("FeelAfter")
+                        .HasColumnType("integer");
+
+                    b.Property<string?>("CommentAfter")
+                        .HasColumnType("text");
+
                     b.Property<int?>("MaxBpm")
                         .HasColumnType("integer");
 

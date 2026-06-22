@@ -285,12 +285,23 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
         return insights;
     }
 
+    [HttpPatch("{id:guid}/feedback")]
+    public async Task<IActionResult> UpdateFeedback(Guid id, [FromBody] RideFeedbackRequest req)
+    {
+        var ride = await db.Rides.FirstOrDefaultAsync(r => r.Id == id && r.UserId == UserId);
+        if (ride is null) return NotFound();
+        ride.FeelAfter = req.FeelAfter;
+        ride.CommentAfter = req.CommentAfter;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     private static RideDto ToDto(Ride r) => new(
         r.Id, r.UserId, r.User?.Pseudo ?? string.Empty,
         r.StartedAt, r.EndedAt, r.DistanceKm, r.DurationSec,
         r.ElevationGainM, r.ElevationLossM, r.AvgSpeedKmh, r.MaxSpeedKmh,
         r.AvgWatts, r.MaxWatts, r.AvgCadenceRpm, r.AvgBpm, r.MaxBpm,
-        r.CaloriesBurned, r.FeelBefore, r.CommentBefore, r.AiAnalysis);
+        r.CaloriesBurned, r.FeelBefore, r.CommentBefore, r.FeelAfter, r.CommentAfter, r.AiAnalysis);
 
     private static RidePointDto ToPointDto(RidePoint p) => new(
         p.Timestamp, p.Lat, p.Lng, p.AltitudeM, p.SpeedKmh, p.Watts, p.Bpm, p.CadenceRpm);

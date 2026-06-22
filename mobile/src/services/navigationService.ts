@@ -53,7 +53,12 @@ export class NavigationService {
 
   constructor(polyline: string, stepsJson: string, elevJson: string) {
     this.routeCoords = decodePolyline(polyline)
-    this.routeSteps = JSON.parse(stepsJson) as RouteStep[]
+    const allSteps = JSON.parse(stepsJson) as RouteStep[]
+    // Remove intermediate arrival steps (OSRM adds "Arrivée" at each waypoint)
+    this.routeSteps = allSteps.filter((s, i, arr) => {
+      const isArrival = s.instruction.toLowerCase().includes('arrivée') || s.emoji === '🏁'
+      return !isArrival || i === arr.length - 1
+    })
     this.elevProfile = JSON.parse(elevJson) as ElevPoint[]
 
     // Pre-compute cumulative distances
@@ -100,9 +105,9 @@ export class NavigationService {
       }
     }
 
-    // --- Arrival ---
+    // --- Arrival (only when >50% done to avoid false positive at start) ---
     const distToEnd = this.totalDistM - progressM
-    if (distToEnd < 200 && distToEnd > 0) {
+    if (distToEnd < 200 && distToEnd > 0 && progressM > this.totalDistM * 0.5) {
       cues.push({ type: 'arrival', emoji: '🏁', message: `Arrivée dans ${Math.round(distToEnd)}m !` })
     }
 

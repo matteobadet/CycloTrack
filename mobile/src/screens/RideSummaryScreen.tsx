@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, TextInput } from 'react-native'
 import { api } from '../lib/api'
 import MarkdownView from '../components/MarkdownView'
 import { TrackStats } from '../services/trackingService'
@@ -32,11 +32,30 @@ export default function RideSummaryScreen({ route, navigation }: any) {
   const s = styles(t)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [loadingAi, setLoadingAi] = useState(false)
+  const [feelAfter, setFeelAfter] = useState<number | null>(null)
+  const [commentAfter, setCommentAfter] = useState('')
+  const [feedbackSaved, setFeedbackSaved] = useState(false)
+  const [savingFeedback, setSavingFeedback] = useState(false)
 
   // Auto-mark planned ride as completed
   React.useEffect(() => {
     if (plannedRideId) api.patch(`/plan/${plannedRideId}/complete`).catch(() => {})
   }, [plannedRideId])
+
+  async function handleSaveFeedback() {
+    setSavingFeedback(true)
+    try {
+      const listRes = await api.get('/rides?pageSize=1')
+      const latestRide = listRes.data[0]
+      if (!latestRide) { Alert.alert('Sortie pas encore synchronisée', 'Reconnectez-vous au réseau et réessayez.'); return }
+      await api.patch(`/rides/${latestRide.id}/feedback`, { feelAfter, commentAfter: commentAfter.trim() || null })
+      setFeedbackSaved(true)
+    } catch {
+      Alert.alert('Erreur', 'Impossible de sauvegarder le feedback.')
+    } finally {
+      setSavingFeedback(false)
+    }
+  }
 
   async function handleAiAnalysis() {
     setLoadingAi(true)
@@ -73,6 +92,40 @@ export default function RideSummaryScreen({ route, navigation }: any) {
         {stats.maxBpm != null && <Row label="FC max" value={`${stats.maxBpm} bpm`} t={t} />}
       </View>
 
+      <View style={s.feedbackCard}>
+        <Text style={s.feedbackTitle}>💬 Ton ressenti</Text>
+        {feedbackSaved ? (
+          <Text style={s.feedbackSaved}>✓ Feedback enregistré</Text>
+        ) : (
+          <>
+            <Text style={s.feelLabel}>Comment tu te sens après la sortie ?</Text>
+            <View style={s.feelRow}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <TouchableOpacity key={n} onPress={() => setFeelAfter(n)} style={[s.feelBtn, feelAfter === n && s.feelBtnActive]}>
+                  <Text style={s.feelBtnText}>{['😫', '😕', '😐', '😊', '🤩'][n - 1]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={[s.commentInput, { color: t.text, borderColor: t.border, backgroundColor: t.inputBg }]}
+              placeholder="Problème de selle, douleur, météo... (optionnel)"
+              placeholderTextColor={t.textMuted}
+              value={commentAfter}
+              onChangeText={setCommentAfter}
+              multiline
+              numberOfLines={3}
+            />
+            <TouchableOpacity
+              style={[s.feedbackBtn, (!feelAfter && !commentAfter.trim()) && s.feedbackBtnDisabled]}
+              onPress={handleSaveFeedback}
+              disabled={savingFeedback || (!feelAfter && !commentAfter.trim())}
+            >
+              {savingFeedback ? <ActivityIndicator color="#fff" /> : <Text style={s.feedbackBtnText}>Enregistrer le feedback</Text>}
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+
       <View style={s.aiCard}>
         <Text style={s.aiTitle}>🤖 Bilan coach IA</Text>
         {aiAnalysis ? (
@@ -102,6 +155,18 @@ const styles = (t: Theme) => StyleSheet.create({
   aiText: { fontSize: 14, color: t.textSub, lineHeight: 22 },
   aiBtn: { backgroundColor: t.purple, borderRadius: 12, padding: 14, alignItems: 'center' },
   aiBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  feedbackCard: { backgroundColor: t.card, borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  feedbackTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 12, color: t.text },
+  feedbackSaved: { color: t.green, fontWeight: '600', fontSize: 15, textAlign: 'center', paddingVertical: 8 },
+  feelLabel: { fontSize: 14, color: t.textSub, marginBottom: 10 },
+  feelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
+  feelBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: t.inputBg, borderWidth: 2, borderColor: t.border, alignItems: 'center', justifyContent: 'center' },
+  feelBtnActive: { borderColor: t.green, backgroundColor: t.green + '22' },
+  feelBtnText: { fontSize: 22 },
+  commentInput: { borderWidth: 1, borderRadius: 10, padding: 10, fontSize: 14, minHeight: 72, marginBottom: 12, textAlignVertical: 'top' },
+  feedbackBtn: { backgroundColor: t.green, borderRadius: 12, padding: 13, alignItems: 'center' },
+  feedbackBtnDisabled: { opacity: 0.4 },
+  feedbackBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   doneBtn: { backgroundColor: t.blue, borderRadius: 14, padding: 16, alignItems: 'center' },
   doneBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 })

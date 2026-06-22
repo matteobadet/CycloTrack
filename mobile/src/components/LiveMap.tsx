@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useMemo } from 'react'
 import { WebView } from 'react-native-webview'
 import { View, StyleSheet } from 'react-native'
 
@@ -8,13 +8,7 @@ interface Props {
   style?: object
 }
 
-function buildHtml(points: { lat: number; lng: number }[], plannedCoords?: [number, number][]) {
-  const lat = points.length ? points[points.length - 1].lat : plannedCoords?.length ? plannedCoords[Math.floor(plannedCoords.length / 2)][0] : 46.5
-  const lng = points.length ? points[points.length - 1].lng : plannedCoords?.length ? plannedCoords[Math.floor(plannedCoords.length / 2)][1] : 2.5
-  const zoom = points.length ? 16 : plannedCoords?.length ? 13 : 6
-  const liveCoords = JSON.stringify(points.map(p => [p.lat, p.lng]))
-  const plannedJson = JSON.stringify(plannedCoords ?? [])
-
+function buildInitialHtml() {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -29,35 +23,40 @@ function buildHtml(points: { lat: number; lng: number }[], plannedCoords?: [numb
 <body>
 <div id="map"></div>
 <script>
-  var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([${lat}, ${lng}], ${zoom});
+  var map = L.map('map', { zoomControl: false, attributionControl: false }).setView([46.5, 2.5], 6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  // Planned route — light gray dashed
-  var plannedCoords = ${plannedJson};
   var plannedLine = null;
-  if (plannedCoords.length > 1) {
-    plannedLine = L.polyline(plannedCoords, { color: '#94a3b8', weight: 3, dashArray: '8,6', opacity: 0.7 }).addTo(map);
-    map.fitBounds(plannedLine.getBounds(), { padding: [20, 20] });
-  }
-
-  // Live GPS track — blue solid
-  var liveCoords = ${liveCoords};
-  var liveLine = L.polyline(liveCoords, { color: '#2563eb', weight: 4 }).addTo(map);
-
-  // Current position marker
+  var liveLine = L.polyline([], { color: '#2563eb', weight: 4 }).addTo(map);
   var posMarker = null;
+  var firstPoint = true;
+
   function updatePos(coords) {
     if (!coords.length) return;
     var last = coords[coords.length - 1];
     if (posMarker) map.removeLayer(posMarker);
     posMarker = L.circleMarker(last, { radius: 9, color: '#fff', fillColor: '#2563eb', fillOpacity: 1, weight: 3 }).addTo(map);
-    map.setView(last, Math.max(map.getZoom(), 15));
+    if (firstPoint) {
+      map.setView(last, 16);
+      firstPoint = false;
+    } else {
+      map.panTo(last, { animate: true, duration: 0.5 });
+    }
   }
-  updatePos(liveCoords);
 
   window.updateMap = function(newLiveCoords) {
     liveLine.setLatLngs(newLiveCoords);
     updatePos(newLiveCoords);
+  };
+
+  window.setPlannedRoute = function(coords) {
+    if (plannedLine) { map.removeLayer(plannedLine); plannedLine = null; }
+    if (coords.length > 1) {
+      plannedLine = L.polyline(coords, { color: '#94a3b8', weight: 3, dashArray: '8,6', opacity: 0.7 }).addTo(map);
+      if (firstPoint) {
+        map.fitBounds(plannedLine.getBounds(), { padding: [20, 20] });
+      }
+    }
   };
 </script>
 </body>
@@ -67,6 +66,9 @@ function buildHtml(points: { lat: number; lng: number }[], plannedCoords?: [numb
 export default function LiveMap({ points, plannedCoords, style }: Props) {
   const webRef = useRef<WebView>(null)
   const prevCountRef = useRef(0)
+  const prevPlannedRef = useRef<[number, number][] | undefined>()
+  // Build HTML only once — never change source after mount
+  const initialHtml = useMemo(() => buildInitialHtml(), [])
 
   useEffect(() => {
     if (!webRef.current || points.length === prevCountRef.current) return
@@ -75,12 +77,19 @@ export default function LiveMap({ points, plannedCoords, style }: Props) {
     webRef.current.injectJavaScript(`window.updateMap(${coords}); true;`)
   }, [points])
 
+  useEffect(() => {
+    if (!webRef.current || !plannedCoords || plannedCoords === prevPlannedRef.current) return
+    prevPlannedRef.current = plannedCoords
+    const json = JSON.stringify(plannedCoords)
+    webRef.current.injectJavaScript(`window.setPlannedRoute(${json}); true;`)
+  }, [plannedCoords])
+
   return (
     <View style={[styles.container, style]}>
       <WebView
         ref={webRef}
         originWhitelist={['*']}
-        source={{ html: buildHtml(points, plannedCoords) }}
+        source={{ html: initialHtml }}
         style={styles.webview}
         scrollEnabled={false}
         javaScriptEnabled

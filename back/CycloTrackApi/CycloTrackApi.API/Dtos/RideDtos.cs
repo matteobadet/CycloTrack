@@ -51,8 +51,12 @@ public record RideDto(
     float CaloriesBurned,
     int? FeelBefore,
     string? CommentBefore,
+    int? FeelAfter,
+    string? CommentAfter,
     string? AiAnalysis
 );
+
+public record RideFeedbackRequest(int? FeelAfter, string? CommentAfter);
 
 public record RidePointDto(
     DateTime Timestamp,

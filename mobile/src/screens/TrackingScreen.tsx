@@ -5,6 +5,22 @@ import { bleService, BleReadings } from '../services/bleService'
 import { saveRideLocally, syncPendingRides } from '../services/offlineStore'
 import { startSpotifyPolling, stopSpotifyPolling, SpotifyTrackInfo } from '../services/spotifyMobileService'
 import { NavigationService, NavCue } from '../services/navigationService'
+
+function getStandaloneNutritionCue(elapsedSec: number): NavCue | null {
+  const elapsedMin = elapsedSec / 60
+  const hydrationWindow = Math.floor(elapsedMin / 20)
+  const foodWindow = Math.floor(elapsedMin / 45)
+  const minInHydWindow = elapsedMin % 20
+  const minInFoodWindow = elapsedMin % 45
+  if (minInHydWindow < 3 && hydrationWindow > 0) {
+    return { type: 'nutrition', emoji: '💧', message: 'Bois 150-200ml d\'eau maintenant' }
+  }
+  if (minInFoodWindow < 3 && foodWindow > 0) {
+    const msg = foodWindow % 2 === 1 ? 'Prends une barre énergétique' : 'Prends un gel ou des fruits secs'
+    return { type: 'nutrition', emoji: '🍌', message: msg }
+  }
+  return null
+}
 import { api } from '../lib/api'
 import { useTheme, Theme } from '../theme'
 import LiveMap from '../components/LiveMap'
@@ -86,9 +102,15 @@ export default function TrackingScreen({ route, navigation }: any) {
       setStats(newStats)
       setPoints([...newPoints])
       // Update navigation cues
-      if (navServiceRef.current && newPoints.length > 0) {
+      if (newPoints.length > 0) {
         const last = newPoints[newPoints.length - 1]
-        const cues = navServiceRef.current.getCues(last.lat, last.lng, newStats.durationSec)
+        const cues = navServiceRef.current
+          ? navServiceRef.current.getCues(last.lat, last.lng, newStats.durationSec)
+          : []
+        if (!cues.some(c => c.type === 'nutrition')) {
+          const nc = getStandaloneNutritionCue(newStats.durationSec)
+          if (nc) cues.push(nc)
+        }
         setNavCues(cues)
       }
     })

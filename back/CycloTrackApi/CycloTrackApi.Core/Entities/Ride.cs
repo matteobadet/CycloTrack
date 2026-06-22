@@ -29,6 +29,9 @@ public class Ride
     public int? FeelBefore { get; set; }
     public string? CommentBefore { get; set; }
 
+    public int? FeelAfter { get; set; }
+    public string? CommentAfter { get; set; }
+
     public string? AiAnalysis { get; set; }
 
     public ICollection<RidePoint> Points { get; set; } = [];
