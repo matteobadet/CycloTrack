@@ -19,11 +19,97 @@ export interface RouteData {
   elevationGainM: number
   elevationLossM: number
   coords: [number, number][]
+  elevations: number[]        // per-coord altitude (m), same length as coords
   elevProfile: { dist: number; alt: number }[]
   durationEstMin: number
   encodedPolyline: string
   keyPoints: { distKm: number; altM: number }[]
   steps: RouteStep[]
+}
+
+// --- Gradient coloring ---
+
+export interface GradientZone {
+  label: string
+  emoji: string
+  color: string
+  min: number
+  max: number
+}
+
+export const GRADIENT_ZONES: GradientZone[] = [
+  { label: 'Descente',       emoji: '⬇️', color: '#22c55e', min: -Infinity, max: -3 },
+  { label: 'Plat',           emoji: '➡️', color: '#3b82f6', min: -3,        max: 2  },
+  { label: 'Montée douce',   emoji: '📈', color: '#eab308', min: 2,         max: 5  },
+  { label: 'Montée modérée', emoji: '⬆️', color: '#f97316', min: 5,         max: 8  },
+  { label: 'Montée raide',   emoji: '🔺', color: '#ef4444', min: 8,         max: Infinity },
+]
+
+export function gradientColor(pct: number): string {
+  return GRADIENT_ZONES.find(z => pct >= z.min && pct < z.max)?.color ?? '#3b82f6'
+}
+
+export interface GradientSegment {
+  coords: [number, number][]
+  color: string
+}
+
+export function buildGradientSegments(coords: [number, number][], elevations: number[]): GradientSegment[] {
+  if (coords.length < 2 || elevations.length < 2) return [{ coords, color: '#3b82f6' }]
+
+  // Assign a smoothed gradient color to each point using a ~100m lookahead window
+  const colors: string[] = []
+  for (let i = 0; i < coords.length; i++) {
+    let dist = 0, j = i
+    while (j + 1 < coords.length && dist < 100) {
+      dist += haversineM(coords[j], coords[j + 1])
+      j++
+    }
+    const altDiff = elevations[Math.min(j, elevations.length - 1)] - elevations[i]
+    colors.push(gradientColor(dist > 1 ? (altDiff / dist) * 100 : 0))
+  }
+
+  // Merge consecutive same-color points into segments (overlap by 1 to avoid gaps)
+  const segments: GradientSegment[] = []
+  let currentColor = colors[0]
+  let segCoords: [number, number][] = [coords[0]]
+
+  for (let i = 1; i < coords.length; i++) {
+    if (colors[i] !== currentColor) {
+      segments.push({ coords: [...segCoords, coords[i]], color: currentColor })
+      segCoords = [coords[i - 1]]
+      currentColor = colors[i]
+    }
+    segCoords.push(coords[i])
+  }
+  if (segCoords.length >= 1) segments.push({ coords: segCoords, color: currentColor })
+
+  return segments
+}
+
+// Reconstruct per-coord elevations by interpolating a sampled elevation profile
+export function elevationsFromProfile(
+  coords: [number, number][],
+  profile: { dist: number; alt: number }[]
+): number[] {
+  if (!profile.length) return new Array(coords.length).fill(0)
+
+  const cumDist: number[] = [0]
+  for (let i = 1; i < coords.length; i++) {
+    cumDist.push(cumDist[i - 1] + haversineM(coords[i - 1], coords[i]) / 1000)
+  }
+
+  return cumDist.map(distKm => {
+    if (distKm <= profile[0].dist) return profile[0].alt
+    if (distKm >= profile[profile.length - 1].dist) return profile[profile.length - 1].alt
+    for (let i = 0; i < profile.length - 1; i++) {
+      if (distKm >= profile[i].dist && distKm <= profile[i + 1].dist) {
+        const t = (distKm - profile[i].dist) / (profile[i + 1].dist - profile[i].dist)
+        return profile[i].alt + t * (profile[i + 1].alt - profile[i].alt)
+      }
+    }
+    return profile[profile.length - 1].alt
+  })
 }
 
 export function decodePolyline(encoded: string): [number, number][] {
@@ -120,5 +206,5 @@ export async function computeRoute(waypoints: [number, number][]): Promise<Route
   const keyPoints = elevProfile.filter((_, i) => i % keyStep === 0).map(p => ({ distKm: p.dist, altM: p.alt }))
 
   const durationEstMin = Math.round((distanceM / 1000) / 18 * 60)
-  return { distanceKm: distanceM / 1000, elevationGainM: gainM, elevationLossM: lossM, coords, elevProfile, durationEstMin, encodedPolyline, keyPoints, steps }
+  return { distanceKm: distanceM / 1000, elevationGainM: gainM, elevationLossM: lossM, coords, elevations, elevProfile, durationEstMin, encodedPolyline, keyPoints, steps }
 }

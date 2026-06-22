@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { MapContainer, TileLayer, Polyline, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
 import L from 'leaflet'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import 'leaflet/dist/leaflet.css'
@@ -254,7 +255,7 @@ export default function PlanPage() {
         <MapContainer center={center} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           <MapClickHandler editMode={editMode} onMapClick={handleMapClick} />
-          {route && <Polyline positions={route.coords} color="#2563eb" weight={4} />}
+          {route && <GradientPolyline coords={route.coords} elevations={route.elevations} />}
           {editMode && waypoints.map((wp, i) => (
             <Marker key={i} position={wp} draggable icon={startIcon}
               eventHandlers={{ dragend: (e: any) => { const ll = e.target.getLatLng(); updateWaypoint(i, ll.lat, ll.lng) } }}
@@ -275,6 +276,9 @@ export default function PlanPage() {
           )}
         </div>
       </div>
+
+      {/* Gradient legend */}
+      {route && <GradientLegend className="mb-4" />}
 
       {/* Edit mode: manual route or waypoint list */}
       {editMode && (

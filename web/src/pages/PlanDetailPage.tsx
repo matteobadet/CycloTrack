@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Polyline, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
-import { computeRoute, decodePolyline, RouteData } from '@/lib/routing'
+import { computeRoute, decodePolyline, RouteData, elevationsFromProfile } from '@/lib/routing'
+import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Brain, Pencil, Copy, X, Check, MapPin, Trash2, Edit2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -26,6 +27,7 @@ interface PlanDetail {
   routePolyline: string | null
   aiAdvice: string | null
   googleMapsUrl: string | null
+  elevationJson: string | null
 }
 
 function toDatetimeLocal(iso: string | null): string {
@@ -167,6 +169,16 @@ export default function PlanDetailPage() {
     : coords.length ? coords[Math.floor(coords.length / 2)]
     : [46.5, 2.5]
 
+  // Elevations for gradient coloring
+  const displayElevations = useMemo(() => {
+    if (newRoute) return newRoute.elevations
+    if (!coords.length || !plan.elevationJson) return []
+    try {
+      const profile: { dist: number; alt: number }[] = JSON.parse(plan.elevationJson)
+      return elevationsFromProfile(coords, profile)
+    } catch { return [] }
+  }, [coords, newRoute, plan.elevationJson])
+
   const displayStats = newRoute
     ? { distanceKm: newRoute.distanceKm, elevationGainM: newRoute.elevationGainM, elevationLossM: newRoute.elevationLossM, estimatedDurationMin: newRoute.durationEstMin }
     : plan
@@ -265,7 +277,12 @@ export default function PlanDetailPage() {
             <MapContainer center={center} zoom={coords.length ? 13 : 6} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <MapClickHandler active={mapEditMode} onMapClick={(lat, lng) => setWaypoints(p => [...p, [lat, lng]])} />
-              {coords.length > 0 && <Polyline positions={coords} color={newRoute ? '#16a34a' : '#2563eb'} weight={4} />}
+              {coords.length > 0 && displayElevations.length > 0 && (
+                <GradientPolyline coords={coords} elevations={displayElevations} />
+              )}
+              {coords.length > 0 && displayElevations.length === 0 && (
+                <GradientPolyline coords={coords} elevations={new Array(coords.length).fill(0)} />
+              )}
               {mapEditMode && waypoints.map((wp, i) => (
                 <Marker key={i} position={wp} draggable icon={markerIcon}
                   eventHandlers={{ dragend: (e: any) => { const ll = e.target.getLatLng(); setWaypoints(p => p.map((w, idx) => idx === i ? [ll.lat, ll.lng] : w)) } }}
@@ -290,6 +307,9 @@ export default function PlanDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Gradient legend */}
+          {coords.length > 0 && !mapEditMode && <GradientLegend className="mt-3" />}
 
           {/* Waypoint editor panel */}
           {editing && mapEditMode && (
