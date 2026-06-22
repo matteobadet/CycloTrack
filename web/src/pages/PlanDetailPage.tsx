@@ -67,6 +67,21 @@ export default function PlanDetailPage() {
     api.get(`/plan/${id}`).then(r => setPlan(r.data)).finally(() => setLoading(false))
   }, [id])
 
+  // Gradient elevations — must be a hook at top level (before any conditional returns)
+  const displayPolylineForElevation = newRoute ? newRoute.encodedPolyline : plan?.routePolyline ?? null
+  const coordsForElevation = useMemo(
+    () => displayPolylineForElevation ? decodePolyline(displayPolylineForElevation) : [],
+    [displayPolylineForElevation]
+  )
+  const displayElevations = useMemo(() => {
+    if (newRoute) return newRoute.elevations
+    if (!coordsForElevation.length || !plan?.elevationJson) return []
+    try {
+      const profile: { dist: number; alt: number }[] = JSON.parse(plan.elevationJson)
+      return elevationsFromProfile(coordsForElevation, profile)
+    } catch { return [] }
+  }, [coordsForElevation, newRoute, plan?.elevationJson])
+
   async function markComplete() {
     await api.patch(`/plan/${id}/complete`)
     setPlan(p => p ? { ...p, isCompleted: true } : p)
@@ -168,16 +183,6 @@ export default function PlanDetailPage() {
   const center: [number, number] = waypoints.length > 0 ? waypoints[0]
     : coords.length ? coords[Math.floor(coords.length / 2)]
     : [46.5, 2.5]
-
-  // Elevations for gradient coloring
-  const displayElevations = useMemo(() => {
-    if (newRoute) return newRoute.elevations
-    if (!coords.length || !plan.elevationJson) return []
-    try {
-      const profile: { dist: number; alt: number }[] = JSON.parse(plan.elevationJson)
-      return elevationsFromProfile(coords, profile)
-    } catch { return [] }
-  }, [coords, newRoute, plan.elevationJson])
 
   const displayStats = newRoute
     ? { distanceKm: newRoute.distanceKm, elevationGainM: newRoute.elevationGainM, elevationLossM: newRoute.elevationLossM, estimatedDurationMin: newRoute.durationEstMin }
