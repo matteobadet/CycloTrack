@@ -1,9 +1,6 @@
 import * as WebBrowser from 'expo-web-browser'
 import { api, API_URL } from '../lib/api'
 
-// The redirect URI registered in Spotify dashboard for Expo Go
-const EXPO_REDIRECT_URI = 'exp://192.168.1.148:8081'
-
 export interface SpotifyTrackInfo {
   trackName: string
   artistName: string
@@ -16,24 +13,15 @@ let currentRideId: string | null = null
 
 export async function openSpotifyAuth(): Promise<boolean> {
   try {
-    // Get auth URL from backend, passing our Expo redirect URI
-    const res = await api.get(`/spotify/auth-url?redirectUri=${encodeURIComponent(EXPO_REDIRECT_URI)}`)
+    // Use server-side callback — works everywhere (no exp:// URI needed)
+    const res = await api.get('/spotify/auth-url')
     const authUrl: string = res.data.url
 
-    // Open browser — it will intercept the redirect to exp:// automatically
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, EXPO_REDIRECT_URI)
+    // Open browser — server handles the OAuth callback and shows a success page
+    await WebBrowser.openBrowserAsync(authUrl)
 
-    if (result.type !== 'success') return false
-
-    // Extract code from the redirect URL
-    const url = result.url
-    const params = new URLSearchParams(url.split('?')[1] ?? '')
-    const code = params.get('code')
-    if (!code) return false
-
-    // Send code to backend to exchange for tokens
-    await api.post('/spotify/exchange', { code, redirectUri: EXPO_REDIRECT_URI })
-    return true
+    // Browser closed — check if Spotify was linked
+    return await getSpotifyStatus()
   } catch {
     return false
   }

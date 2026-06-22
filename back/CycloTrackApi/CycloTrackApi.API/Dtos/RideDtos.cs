@@ -58,6 +58,27 @@ public record RideDto(
 
 public record RideFeedbackRequest(int? FeelAfter, string? CommentAfter);
 
+public record StartRideRequest(DateTime StartedAt);
+
+public record CompleteRideRequest(
+    DateTime EndedAt,
+    float DistanceKm,
+    int DurationSec,
+    float ElevationGainM,
+    float ElevationLossM,
+    float AvgSpeedKmh,
+    float MaxSpeedKmh,
+    float? AvgWatts,
+    float? MaxWatts,
+    float? AvgCadenceRpm,
+    int? AvgBpm,
+    int? MaxBpm,
+    float CaloriesBurned,
+    int? FeelBefore,
+    string? CommentBefore,
+    List<RidePointRequest> Points
+);
+
 public record RidePointDto(
     DateTime Timestamp,
     double Lat,

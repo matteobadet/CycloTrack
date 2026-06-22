@@ -97,6 +97,59 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
         return CreatedAtAction(nameof(GetRide), new { id = ride.Id }, ToDto(ride));
     }
 
+    // Creates a ride stub at start — used by mobile to get a server ID for Spotify polling
+    [HttpPost("start")]
+    public async Task<ActionResult<object>> StartRide([FromBody] StartRideRequest req)
+    {
+        var ride = new Ride { UserId = UserId, StartedAt = req.StartedAt };
+        await rideRepo.AddAsync(ride);
+        return Ok(new { id = ride.Id });
+    }
+
+    // Completes a ride started with /rides/start — updates stats + adds GPS points
+    [HttpPatch("{id:guid}/complete")]
+    public async Task<ActionResult<RideDto>> CompleteRide(Guid id, [FromBody] CompleteRideRequest req)
+    {
+        var ride = await db.Rides.FirstOrDefaultAsync(r => r.Id == id && r.UserId == UserId);
+        if (ride is null) return NotFound();
+
+        ride.EndedAt = req.EndedAt;
+        ride.DistanceKm = req.DistanceKm;
+        ride.DurationSec = req.DurationSec;
+        ride.ElevationGainM = req.ElevationGainM;
+        ride.ElevationLossM = req.ElevationLossM;
+        ride.AvgSpeedKmh = req.AvgSpeedKmh;
+        ride.MaxSpeedKmh = req.MaxSpeedKmh;
+        ride.AvgWatts = req.AvgWatts;
+        ride.MaxWatts = req.MaxWatts;
+        ride.AvgCadenceRpm = req.AvgCadenceRpm;
+        ride.AvgBpm = req.AvgBpm;
+        ride.MaxBpm = req.MaxBpm;
+        ride.CaloriesBurned = req.CaloriesBurned;
+        ride.FeelBefore = req.FeelBefore;
+        ride.CommentBefore = req.CommentBefore;
+
+        if (req.Points.Count > 0)
+        {
+            var points = req.Points.Select(p => new RidePoint
+            {
+                RideId = ride.Id,
+                Timestamp = p.Timestamp,
+                Lat = p.Lat,
+                Lng = p.Lng,
+                AltitudeM = p.AltitudeM,
+                SpeedKmh = p.SpeedKmh,
+                Watts = p.Watts,
+                Bpm = p.Bpm,
+                CadenceRpm = p.CadenceRpm,
+            });
+            await rideRepo.AddPointsAsync(points);
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(ToDto(ride));
+    }
+
     [HttpPost("{id:guid}/analyze")]
     public async Task<ActionResult<object>> Analyze(Guid id)
     {

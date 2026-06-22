@@ -40,7 +40,19 @@ public class SpotifyController(ISpotifyService spotifyService, AppDbContext db, 
         user.SpotifyTokenExpiresAt = tokens.ExpiresAt;
         await db.SaveChangesAsync();
 
-        return Redirect("http://localhost:82/profile?spotify=linked");
+        // Detect mobile in-app browser (no JS redirect needed, user returns to app manually)
+        var ua = Request.Headers.UserAgent.ToString();
+        var isMobile = ua.Contains("okhttp") || ua.Contains("Expo") || ua.Contains("ReactNative") || !Request.Headers.ContainsKey("Referer");
+        if (isMobile)
+            return Content("""
+                <!DOCTYPE html><html><head><title>Spotify lié</title>
+                <meta name="viewport" content="width=device-width,initial-scale=1">
+                <style>body{font-family:sans-serif;text-align:center;padding:40px;background:#111;color:#fff}
+                h1{color:#1db954}p{color:#aaa}</style></head>
+                <body><h1>✅ Spotify lié avec succès</h1>
+                <p>Tu peux fermer cette fenêtre et retourner sur CycloTrack.</p></body></html>
+                """, "text/html");
+        return Redirect("http://167.233.129.150/profile?spotify=linked");
     }
 
     // Called by mobile app after intercepting Spotify redirect

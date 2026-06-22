@@ -63,6 +63,7 @@ export default function TrackingScreen({ route, navigation }: any) {
   const [plannedRouteCoords, setPlannedRouteCoords] = useState<[number, number][] | undefined>()
   const navServiceRef = useRef<NavigationService | null>(null)
   const rideIdRef = useRef<string | null>(initialRideId ?? null)
+  const serverRideIdRef = useRef<string | null>(null)
   const statsRef = useRef<TrackStats | null>(null)
   const bleRef = useRef<BleReadings>({ bpm: null, watts: null, cadenceRpm: null })
 
@@ -116,9 +117,14 @@ export default function TrackingScreen({ route, navigation }: any) {
     })
     setStatus('running')
 
-    // Start Spotify polling once ride is started (rideId known after sync)
-    // We use a placeholder — Spotify poll will only send data after the ride is synced
-    // to the server and we have a real rideId. For now, start polling and attach when we get the ID.
+    // Create ride on server immediately to get a real ID for Spotify polling
+    try {
+      const res = await api.post('/rides/start', { startedAt: new Date().toISOString() })
+      serverRideIdRef.current = res.data.id
+      startPollingForRide(res.data.id)
+    } catch {
+      // No connectivity — Spotify polling skipped, ride will sync offline at end
+    }
   }
 
   function handlePause() { trackingService.pause(); setStatus('paused') }
@@ -134,19 +140,49 @@ export default function TrackingScreen({ route, navigation }: any) {
           setNowPlaying(null)
           const { stats: finalStats, points: finalPoints } = trackingService.stop()
           const now = new Date().toISOString()
-          const rideId = `local-${Date.now()}`
-          const savedRide = await saveRideLocally({
-            localId: rideId,
-            startedAt: finalPoints[0] ? new Date(finalPoints[0].timestamp).toISOString() : now,
-            endedAt: now,
-            stats: finalStats,
-            points: finalPoints,
-            feelBefore,
-            commentBefore,
-          })
-          const serverRideId = await syncPendingRides().catch(() => null)
+          const startedAt = finalPoints[0] ? new Date(finalPoints[0].timestamp).toISOString() : now
+          const pointsPayload = finalPoints.map(p => ({
+            timestamp: new Date(p.timestamp).toISOString(),
+            lat: p.lat, lng: p.lng,
+            altitudeM: p.altitudeM, speedKmh: p.speedKmh,
+            watts: p.watts, bpm: p.bpm, cadenceRpm: p.cadenceRpm,
+          }))
+
+          let finalRideId: string
+          if (serverRideIdRef.current) {
+            // Complete the ride created at start (Spotify was polling against it)
+            finalRideId = serverRideIdRef.current
+            await api.patch(`/rides/${finalRideId}/complete`, {
+              endedAt: now,
+              distanceKm: finalStats.distanceKm,
+              durationSec: finalStats.durationSec,
+              elevationGainM: finalStats.elevationGainM,
+              elevationLossM: finalStats.elevationLossM,
+              avgSpeedKmh: finalStats.avgSpeedKmh,
+              maxSpeedKmh: finalStats.maxSpeedKmh,
+              avgWatts: finalStats.avgWatts ?? null,
+              maxWatts: finalStats.maxWatts ?? null,
+              avgCadenceRpm: finalStats.avgCadenceRpm ?? null,
+              avgBpm: finalStats.avgBpm ?? null,
+              maxBpm: finalStats.maxBpm ?? null,
+              caloriesBurned: finalStats.caloriesBurned,
+              feelBefore: feelBefore ?? null,
+              commentBefore: commentBefore ?? null,
+              points: pointsPayload,
+            }).catch(async () => {
+              const localId = `local-${Date.now()}`
+              await saveRideLocally({ localId, startedAt, endedAt: now, stats: finalStats, points: finalPoints, feelBefore, commentBefore })
+              finalRideId = localId
+            })
+          } else {
+            const localId = `local-${Date.now()}`
+            await saveRideLocally({ localId, startedAt, endedAt: now, stats: finalStats, points: finalPoints, feelBefore, commentBefore })
+            await syncPendingRides().catch(() => null)
+            finalRideId = localId
+          }
+
           bleService.disconnect()
-          navigation.replace('RideSummary', { stats: finalStats, points: finalPoints, rideId, plannedRideId })
+          navigation.replace('RideSummary', { stats: finalStats, points: finalPoints, rideId: finalRideId, plannedRideId })
         },
       },
     ])
