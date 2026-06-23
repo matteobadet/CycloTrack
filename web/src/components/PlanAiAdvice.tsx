@@ -164,7 +164,7 @@ function renderTable(lines: string[]) {
         </thead>
         <tbody>
           {body.map((r, ri) => (
-            <tr key={ri} className="border-b border-current opacity-0 dark:opacity-0" style={{ borderOpacity: 0.1 }}>
+            <tr key={ri} className="border-b border-current" style={{ opacity: 1 }}>
               {parseRow(r).map((c, ci) => (
                 <td key={ci} className="px-2 py-1.5 align-top" dangerouslySetInnerHTML={{ __html: renderInline(c) }} />
               ))}

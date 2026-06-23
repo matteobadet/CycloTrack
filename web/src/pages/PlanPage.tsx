@@ -227,7 +227,7 @@ export default function PlanPage() {
         keyPoints: route.keyPoints,
         cols: cols.length > 0 ? cols : undefined,
         pois: pois.length > 0 ? pois.map(p => ({ type: p.type, label: p.label })) : undefined,
-        steps: route.steps.length > 0 ? route.steps.map(s => {
+        steps: (route as any).steps?.length > 0 ? (route as any).steps.map((s: any) => {
           const cumKm = s.cumulativeM / 1000
           // Interpolate altitude from elevProfile at this cumulative distance
           const ep = route.elevProfile
