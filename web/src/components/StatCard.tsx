@@ -2,7 +2,7 @@ interface Props {
   icon: React.ReactNode
   label: string
   value: string
-  sub?: string
+  sub?: React.ReactNode
   color: string
 }
 
@@ -13,7 +13,7 @@ export default function StatCard({ icon, label, value, sub, color }: Props) {
         {icon}
       </div>
       <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-      {sub && <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{sub}</p>}
+      {sub && <div className="mt-0.5">{sub}</div>}
       <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">{label}</p>
     </div>
   )

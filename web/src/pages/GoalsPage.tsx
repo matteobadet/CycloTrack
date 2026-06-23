@@ -52,6 +52,14 @@ function GoalCard({ goal, onDelete }: { goal: Goal; onDelete: () => void }) {
             {PERIODS.find(p => p.value === goal.period)?.label}
             {goal.description && ` — ${goal.description}`}
           </p>
+          {!isAchieved && goal.endDate && (() => {
+            const daysLeft = Math.ceil((new Date(goal.endDate).getTime() - Date.now()) / 86400000)
+            return daysLeft >= 0 ? (
+              <p className={`text-xs mt-0.5 font-medium ${daysLeft <= 3 ? 'text-orange-500' : 'text-gray-400 dark:text-slate-500'}`}>
+                {daysLeft === 0 ? 'Expire aujourd\'hui' : `Il reste ${daysLeft} jour${daysLeft > 1 ? 's' : ''}`}
+              </p>
+            ) : null
+          })()}
         </div>
         <button onClick={onDelete} className="text-gray-300 dark:text-slate-600 hover:text-red-400 transition-colors">
           <Trash2 size={16} />

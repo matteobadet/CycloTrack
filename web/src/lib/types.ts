@@ -19,6 +19,7 @@ export interface Ride {
   feelBefore?: number
   commentBefore?: string
   aiAnalysis?: string
+  routePolyline?: string
 }
 
 export interface RidePoint {

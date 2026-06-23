@@ -141,15 +141,21 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Bouton sauvegarder */}
-      <button
-        onClick={() => save()}
-        disabled={isPending}
-        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 w-full justify-center mb-5"
-      >
-        <Save size={15} />
-        {saved ? 'Sauvegardé ✓' : isPending ? 'Sauvegarde...' : 'Sauvegarder le profil'}
-      </button>
+      {/* Bouton sauvegarder — sticky en bas */}
+      <div className="sticky bottom-4 z-10 mb-5">
+        <button
+          onClick={() => save()}
+          disabled={isPending}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium w-full justify-center shadow-lg transition-colors ${
+            saved
+              ? 'bg-green-600 text-white'
+              : 'bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50'
+          }`}
+        >
+          <Save size={15} />
+          {saved ? 'Sauvegardé ✓' : isPending ? 'Sauvegarde...' : 'Sauvegarder le profil'}
+        </button>
+      </div>
 
       {/* Spotify */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-6">

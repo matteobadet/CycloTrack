@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/axios'
-import { formatDuration, formatDate } from '@/lib/utils'
+import { formatDuration, formatDate, timeAgo } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
 import { UserPlus, Trophy, Bike, Users, Send, Trash2, Swords, Plus, X, Loader2 } from 'lucide-react'
 
@@ -379,7 +379,7 @@ function RideCard({ ride, onReact, currentUserId }: {
         </div>
         <div>
           <p className="font-semibold text-sm dark:text-slate-100">{ride.userPseudo}</p>
-          <p className="text-xs text-slate-400">{formatDate(ride.startedAt)}</p>
+          <p className="text-xs text-slate-400" title={formatDate(ride.startedAt)}>{timeAgo(ride.startedAt)}</p>
         </div>
       </div>
 
@@ -601,22 +601,27 @@ export default function SocialPage() {
             <p className="text-slate-400">Chargement...</p>
           ) : (
             <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-xl border shadow-sm overflow-hidden">
-              {leaderboard.map((entry, i) => (
-                <div key={entry.userId} className={`flex items-center gap-4 px-5 py-3 ${i !== leaderboard.length - 1 ? 'border-b dark:border-slate-700' : ''}`}>
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-                    i === 0 ? 'bg-yellow-100 text-yellow-700' :
-                    i === 1 ? 'bg-gray-100 text-gray-600' :
-                    i === 2 ? 'bg-orange-100 text-orange-600' : 'text-gray-400'
-                  }`}>
-                    {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
-                  </span>
-                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-sm">
-                    {entry.pseudo[0]?.toUpperCase()}
+              {leaderboard.map((entry, i) => {
+                const isMe = entry.userId === currentUserId
+                return (
+                  <div key={entry.userId} className={`flex items-center gap-4 px-5 py-3 ${i !== leaderboard.length - 1 ? 'border-b dark:border-slate-700' : ''} ${isMe ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                    <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                      i === 0 ? 'bg-yellow-100 text-yellow-700' :
+                      i === 1 ? 'bg-gray-100 text-gray-600' :
+                      i === 2 ? 'bg-orange-100 text-orange-600' : 'text-gray-400'
+                    }`}>
+                      {i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}
+                    </span>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${isMe ? 'bg-blue-500 text-white' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400'}`}>
+                      {entry.pseudo[0]?.toUpperCase()}
+                    </div>
+                    <span className={`flex-1 font-medium dark:text-slate-100 ${isMe ? 'font-bold text-blue-700 dark:text-blue-300' : ''}`}>
+                      {entry.pseudo}{isMe ? ' (moi)' : ''}
+                    </span>
+                    <span className="font-bold text-gray-700 dark:text-slate-300">{entry.value.toFixed(1)} {metricLabel[metric]}</span>
                   </div>
-                  <span className="flex-1 font-medium dark:text-slate-100">{entry.pseudo}</span>
-                  <span className="font-bold text-gray-700 dark:text-slate-300">{entry.value.toFixed(1)} {metricLabel[metric]}</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
