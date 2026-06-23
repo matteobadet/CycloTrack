@@ -7,7 +7,8 @@ import { Stats, Ride } from '@/lib/types'
 import { formatDuration, formatDateShort } from '@/lib/utils'
 import StatCard from '@/components/StatCard'
 import MonthlyProgressChart from '@/components/MonthlyProgressChart'
-import { Bike, TrendingUp, Mountain, Flame, TrendingDown, Minus } from 'lucide-react'
+import { Bike, TrendingUp, Mountain, Flame, TrendingDown, Minus, Activity } from 'lucide-react'
+import { useAuthStore } from '@/stores/authStore'
 
 const PERIODS = [
   { key: '7d',  label: '7 jours',  days: 7 },
@@ -16,6 +17,120 @@ const PERIODS = [
   { key: '1y',  label: '1 an',     days: 365 },
 ] as const
 type PeriodKey = typeof PERIODS[number]['key']
+
+// TSS/CTL/ATL computation
+// TSS per ride: if power available → (durationSec × avgWatts²)/(ftp² × 3600) × 100
+// Fallback (HR): (durationSec/3600) × (avgBpm/maxBpm)² × 100
+// Fallback (none): (durationSec/3600) × 50  (flat ~50 TSS/h estimate)
+function computeTss(ride: Ride, ftp: number, maxHrBpm: number): number {
+  const hours = ride.durationSec / 3600
+  if (ride.avgWatts && ride.avgWatts > 0 && ftp > 0) {
+    const IF = ride.avgWatts / ftp
+    return hours * IF * IF * 100
+  }
+  if (ride.avgBpm && ride.avgBpm > 0 && maxHrBpm > 0) {
+    const hrFrac = ride.avgBpm / maxHrBpm
+    return hours * hrFrac * hrFrac * 100
+  }
+  return hours * 50
+}
+
+function ema(days: number) { return Math.exp(-1 / days) }
+
+interface FitnessMetrics { ctl: number; atl: number; tsb: number; todayTss: number }
+
+function computeFitness(rides: Ride[], ftp: number, maxHrBpm: number): FitnessMetrics {
+  const k42 = ema(42), k7 = ema(7)
+  // Build a day-keyed map of TSS
+  const tssMap = new Map<string, number>()
+  for (const r of rides) {
+    const day = r.startedAt.slice(0, 10)
+    tssMap.set(day, (tssMap.get(day) ?? 0) + computeTss(r, ftp, maxHrBpm))
+  }
+  // Iterate daily from 90 days ago to today
+  let ctl = 0, atl = 0
+  const today = new Date()
+  let todayTss = 0
+  for (let i = 89; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const tss = tssMap.get(key) ?? 0
+    if (i === 0) todayTss = tss
+    ctl = ctl * k42 + tss * (1 - k42)
+    atl = atl * k7  + tss * (1 - k7)
+  }
+  return { ctl, atl, tsb: ctl - atl, todayTss }
+}
+
+function FitnessWidget({ rides, ftp, maxHrBpm }: { rides: Ride[]; ftp: number; maxHrBpm: number }) {
+  const { ctl, atl, tsb, todayTss } = useMemo(
+    () => computeFitness(rides, ftp, maxHrBpm),
+    [rides, ftp, maxHrBpm]
+  )
+
+  const tsbColor = tsb > 5 ? 'text-green-600 dark:text-green-400'
+    : tsb < -10 ? 'text-red-500 dark:text-red-400'
+    : 'text-yellow-500 dark:text-yellow-400'
+
+  const tsbLabel = tsb > 5 ? 'Forme ✓' : tsb < -10 ? 'Fatigue ⚠' : 'Neutre'
+
+  const hasPower = rides.some(r => r.avgWatts && r.avgWatts > 0)
+  const hasFtp = ftp > 0
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-gray-700 dark:text-slate-200 flex items-center gap-2">
+          <Activity size={16} className="text-indigo-500" />
+          Forme & charge
+        </h2>
+        {!hasFtp && (
+          <Link to="/profile" className="text-xs text-blue-500 dark:text-blue-400 hover:underline">
+            Renseigne ton FTP pour plus de précision →
+          </Link>
+        )}
+        {hasFtp && !hasPower && (
+          <span className="text-xs text-gray-400 dark:text-slate-500">Estimation via FC</span>
+        )}
+        {hasFtp && hasPower && (
+          <span className="text-xs text-gray-400 dark:text-slate-500">Basé sur la puissance</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <div className="text-center bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
+          <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{ctl.toFixed(0)}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">CTL</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">Condition</p>
+        </div>
+        <div className="text-center bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
+          <p className="text-xl font-bold text-orange-500 dark:text-orange-400">{atl.toFixed(0)}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">ATL</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">Fatigue</p>
+        </div>
+        <div className={`text-center rounded-lg p-3 ${tsb >= 0 ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+          <p className={`text-xl font-bold ${tsbColor}`}>{tsb > 0 ? '+' : ''}{tsb.toFixed(0)}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">TSB</p>
+          <p className={`text-xs font-medium ${tsbColor}`}>{tsbLabel}</p>
+        </div>
+        <div className="text-center bg-gray-50 dark:bg-slate-700/50 rounded-lg p-3">
+          <p className="text-xl font-bold text-gray-700 dark:text-slate-200">{todayTss.toFixed(0)}</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">TSS</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">Aujourd'hui</p>
+        </div>
+      </div>
+
+      {/* Interprétation */}
+      <div className="bg-gray-50 dark:bg-slate-700/30 rounded-lg p-3 text-xs text-gray-500 dark:text-slate-400 leading-relaxed">
+        <span className="font-semibold text-gray-600 dark:text-slate-300">Comment lire ces chiffres :</span>{' '}
+        <span className="text-indigo-500 dark:text-indigo-400 font-medium">CTL</span> = ta condition sur 42j (↑ = plus entraîné).{' '}
+        <span className="text-orange-500 dark:text-orange-400 font-medium">ATL</span> = fatigue récente (7j).{' '}
+        <span className={`font-medium ${tsbColor}`}>TSB = CTL − ATL</span> : positif → reposé, négatif → fatigué.
+      </div>
+    </div>
+  )
+}
 
 function Delta({ curr, prev }: { curr: number; prev: number }) {
   if (prev === 0) return null
@@ -32,6 +147,7 @@ function Delta({ curr, prev }: { curr: number; prev: number }) {
 
 export default function DashboardPage() {
   const [period, setPeriod] = useState<PeriodKey>('30d')
+  const user = useAuthStore(s => s.user)
 
   const { data: stats, isLoading: loadingStats } = useQuery<Stats>({
     queryKey: ['stats'],
@@ -214,6 +330,15 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Widget forme */}
+      {allRides.length >= 3 && (
+        <FitnessWidget
+          rides={allRides}
+          ftp={user?.ftp || 0}
+          maxHrBpm={user?.maxHrBpm || 190}
+        />
       )}
 
       {/* Progression mensuelle */}
