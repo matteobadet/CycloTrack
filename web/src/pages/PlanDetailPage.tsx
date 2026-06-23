@@ -8,8 +8,7 @@ import { computeRoute, decodePolyline, RouteData, elevationsFromProfile } from '
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
 import ColStats, { ClimbSegment, detectCols } from '@/components/ColStats'
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Brain, Pencil, Copy, X, Check, MapPin, Trash2, Edit2 } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import PlanAiAdvice from '@/components/PlanAiAdvice'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
 L.Icon.Default.mergeOptions({ iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png', iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png', shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png' })
@@ -430,41 +429,31 @@ export default function PlanDetailPage() {
       )}
 
       {/* AI advice */}
-      {!plan.isCompleted && (
+      {(plan.aiAdvice || (!plan.isCompleted && editing)) && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Brain size={16} className="text-purple-500" /> Conseils du coach IA
             </h2>
-            <button
-              onClick={handleGenerateAi}
-              disabled={generatingAi}
-              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
-            >
-              {generatingAi ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
-              {generatingAi ? 'Analyse en cours...' : plan.aiAdvice ? 'Régénérer' : 'Obtenir les conseils'}
-            </button>
+            {editing && !plan.isCompleted && (
+              <button
+                onClick={handleGenerateAi}
+                disabled={generatingAi}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+              >
+                {generatingAi ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+                {generatingAi ? 'Analyse en cours...' : plan.aiAdvice ? 'Régénérer' : 'Générer les conseils'}
+              </button>
+            )}
           </div>
           {aiError && <p className="text-sm text-red-500 mb-3">{aiError}</p>}
           {plan.aiAdvice ? (
-            <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-headings:text-white dark:prose-strong:text-white">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{plan.aiAdvice}</ReactMarkdown>
-            </div>
-          ) : !generatingAi && (
+            <PlanAiAdvice advice={plan.aiAdvice} />
+          ) : editing && !generatingAi && (
             <p className="text-sm text-gray-400 dark:text-slate-500">
-              Cliquez sur "Obtenir les conseils" pour recevoir un plan personnalisé basé sur votre profil, la météo et le profil altimétrique.
+              Cliquez sur "Générer les conseils" pour recevoir un plan personnalisé basé sur votre profil, la météo et le profil altimétrique.
             </p>
           )}
-        </div>
-      )}
-      {plan.isCompleted && plan.aiAdvice && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
-          <h2 className="font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
-            <Brain size={16} className="text-purple-500" /> Conseils du coach IA
-          </h2>
-          <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-headings:text-white dark:prose-strong:text-white">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{plan.aiAdvice}</ReactMarkdown>
-          </div>
         </div>
       )}
     </div>

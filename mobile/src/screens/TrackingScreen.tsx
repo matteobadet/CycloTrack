@@ -8,6 +8,46 @@ import { startSpotifyPolling, stopSpotifyPolling, SpotifyTrackInfo } from '../se
 import { NavigationService, NavCue } from '../services/navigationService'
 import ElevationMiniChart from '../components/ElevationMiniChart'
 
+// ── Parse AI plan phases for mobile display ──
+interface AiPhase { fromKm: number; toKm: number; label: string; target: string }
+
+function parseAiPhases(advice: string): AiPhase[] {
+  const phases: AiPhase[] = []
+  const lines = advice.split('\n')
+  // Match patterns like: "Phase 1 : km 0 → 15" or "Phase 1 : km 0→15" or "km 0 → 4.0 (avant la montée)"
+  const phaseRe = /(?:phase\s+\d+\s*:?\s*)?km\s*([\d.]+)\s*[→→-]+\s*([\d.]+)/i
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(phaseRe)
+    if (!m) continue
+    const fromKm = parseFloat(m[1])
+    const toKm = parseFloat(m[2])
+    // Grab label from same line (text after the km range)
+    const labelMatch = lines[i].match(/\(([^)]+)\)/) || lines[i].match(/[-–:]\s*(.+)$/)
+    const label = labelMatch ? labelMatch[1].replace(/\*/g, '').trim() : `Phase km ${fromKm}→${toKm}`
+    // Collect target info from next few bullet lines
+    const targetLines: string[] = []
+    for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      const l = lines[j].trim()
+      if (!l || l.match(/^#{1,3}/) || l.match(/^phase\s+\d/i)) break
+      if (l.startsWith('-') || l.startsWith('*')) {
+        const txt = l.replace(/^[-*]\s*/, '').replace(/\*\*/g, '')
+        // Only keep power/FC/tactical lines, skip long nutritional ones
+        if (txt.match(/W|bpm|FC|puissance|Z[1-5]|km\/h|cadence|relancer|gérer|descente|montée/i) && txt.length < 100) {
+          targetLines.push(txt)
+        }
+        if (targetLines.length >= 2) break
+      }
+    }
+    phases.push({ fromKm, toKm, label, target: targetLines.join(' · ') || '' })
+  }
+  return phases
+}
+
+function getCurrentPhase(phases: AiPhase[], progressKm: number): AiPhase | null {
+  // Find the phase that contains current distance, with 0.3km lookahead
+  return phases.find(p => progressKm >= p.fromKm - 0.3 && progressKm < p.toKm) ?? null
+}
+
 function getStandaloneNutritionCue(elapsedSec: number): NavCue | null {
   const elapsedMin = elapsedSec / 60
   const hydrationWindow = Math.floor(elapsedMin / 20)
@@ -77,6 +117,7 @@ export default function TrackingScreen({ route, navigation }: any) {
   const [nowPlaying, setNowPlaying] = useState<SpotifyTrackInfo | null>(null)
   const [navCues, setNavCues] = useState<NavCue[]>([])
   const [plannedRouteCoords, setPlannedRouteCoords] = useState<[number, number][] | undefined>()
+  const [aiPhases, setAiPhases] = useState<AiPhase[]>([])
   const [offRoute, setOffRoute] = useState(false)
   const [batterySaver, setBatterySaverState] = useState(false)
   const [progressM, setProgressM] = useState(0)
@@ -110,6 +151,9 @@ export default function TrackingScreen({ route, navigation }: any) {
         const svc = new NavigationService(plan.routePolyline, '[]', plan.elevationJson ?? '[]')
         navServiceRef.current = svc
         setPlannedRouteCoords(svc.routeCoords)
+      }
+      if (plan.aiAdvice) {
+        setAiPhases(parseAiPhases(plan.aiAdvice))
       }
     }).catch(() => {})
   }, [plannedRideId])
@@ -309,6 +353,20 @@ export default function TrackingScreen({ route, navigation }: any) {
           </View>
         )}
 
+        {/* Current phase objective from AI plan */}
+        {aiPhases.length > 0 && status === 'running' && (() => {
+          const progressKm = progressM / 1000
+          const phase = getCurrentPhase(aiPhases, progressKm)
+          if (!phase) return null
+          return (
+            <View style={s.phaseCard}>
+              <Text style={s.phaseLabel}>🎯 {phase.label}</Text>
+              {phase.target ? <Text style={s.phaseTarget}>{phase.target}</Text> : null}
+              <Text style={s.phaseKm}>km {phase.fromKm.toFixed(1)} → {phase.toKm.toFixed(1)}</Text>
+            </View>
+          )
+        })()}
+
         <View style={s.statsGrid}>
           <StatBox label="Distance" value={stats ? stats.distanceKm.toFixed(2) : '0.00'} unit=" km" t={t} />
           <StatBox label="Vitesse" value={stats ? stats.avgSpeedKmh.toFixed(1) : '0.0'} unit=" km/h" t={t} />
@@ -403,6 +461,10 @@ const styles = (t: Theme) => StyleSheet.create({
   timer: { fontSize: 48, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: t.text, marginBottom: 8 },
   etaRow: { alignItems: 'center', marginBottom: 12 },
   etaText: { fontSize: 13, color: t.textSub, fontWeight: '600' },
+  phaseCard: { backgroundColor: '#7c3aed22', borderRadius: 12, borderWidth: 1, borderColor: '#7c3aed66', padding: 12, marginBottom: 12 },
+  phaseLabel: { fontSize: 13, fontWeight: '700', color: '#a78bfa', marginBottom: 3 },
+  phaseTarget: { fontSize: 12, color: t.text, marginBottom: 3, lineHeight: 18 },
+  phaseKm: { fontSize: 11, color: t.textMuted },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   bleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   bleChip: { flex: 1, backgroundColor: t.card, borderRadius: 20, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: t.blue },
