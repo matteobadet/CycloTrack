@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { computeRoute, decodePolyline, RouteData, elevationsFromProfile } from '@/lib/routing'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
+import ColStats from '@/components/ColStats'
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Brain, Pencil, Copy, X, Check, MapPin, Trash2, Edit2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -81,6 +82,13 @@ export default function PlanDetailPage() {
       return elevationsFromProfile(coordsForElevation, profile)
     } catch { return [] }
   }, [coordsForElevation, newRoute, plan?.elevationJson])
+
+  const elevProfile = useMemo(() => {
+    if (newRoute?.elevProfile) return newRoute.elevProfile
+    if (!plan?.elevationJson) return []
+    try { return JSON.parse(plan.elevationJson) as { dist: number; alt: number }[] }
+    catch { return [] }
+  }, [newRoute, plan?.elevationJson])
 
   async function markComplete() {
     await api.patch(`/plan/${id}/complete`)
@@ -315,6 +323,9 @@ export default function PlanDetailPage() {
 
           {/* Gradient legend */}
           {coords.length > 0 && !mapEditMode && <GradientLegend className="mt-3" />}
+
+          {/* Col stats */}
+          {elevProfile.length > 1 && <ColStats elevProfile={elevProfile} />}
 
           {/* Waypoint editor panel */}
           {editing && mapEditMode && (
