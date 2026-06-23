@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet'
@@ -5,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { Ride, RidePoint } from '@/lib/types'
 import { formatDuration, formatDate } from '@/lib/utils'
-import { Brain, Loader2, ArrowLeft, Trophy } from 'lucide-react'
+import { Brain, Loader2, ArrowLeft, Trophy, Share2, Check } from 'lucide-react'
 import AiCoachAnalysis from '@/components/AiCoachAnalysis'
 import RidePerformanceChart from '@/components/RidePerformanceChart'
 import HrZonesChart from '@/components/HrZonesChart'
@@ -51,6 +52,15 @@ export default function RideDetailPage() {
     queryFn: () => api.get(`/rides/${id}`).then(r => r.data),
   })
 
+  const [copied, setCopied] = useState(false)
+
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   const { mutate: analyze, isPending } = useMutation({
     mutationFn: () => api.post(`/rides/${id}/analyze`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ride', id] }),
@@ -69,8 +79,23 @@ export default function RideDetailPage() {
         <ArrowLeft size={14} /> Retour aux sorties
       </Link>
 
-      <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">{formatDate(ride.startedAt)}</h1>
-      <p className="text-gray-400 dark:text-slate-500 text-sm mb-6">{formatDuration(ride.durationSec)}</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">{formatDate(ride.startedAt)}</h1>
+          <p className="text-gray-400 dark:text-slate-500 text-sm">{formatDuration(ride.durationSec)}</p>
+        </div>
+        <button
+          onClick={handleShare}
+          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+            copied
+              ? 'border-green-400 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
+              : 'border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-400 hover:border-blue-400 hover:text-blue-500'
+          }`}
+        >
+          {copied ? <Check size={14} /> : <Share2 size={14} />}
+          {copied ? 'Lien copié !' : 'Partager'}
+        </button>
+      </div>
 
       {/* Carte */}
       {coords.length > 1 && (

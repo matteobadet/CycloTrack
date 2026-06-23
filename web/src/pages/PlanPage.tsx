@@ -140,6 +140,7 @@ export default function PlanPage() {
       const gpxData = parseGpx(text)
       setRoute(gpxData as any)
       setWaypoints([gpxData.coords[0], gpxData.coords[gpxData.coords.length - 1]])
+      if (!title) setTitle(`Sortie GPX ${gpxData.distanceKm.toFixed(0)} km — ${gpxData.elevationGainM.toFixed(0)} m D+`)
     } catch (e: any) {
       setError(e.message ?? 'Erreur lors de l\'import GPX.')
     } finally {

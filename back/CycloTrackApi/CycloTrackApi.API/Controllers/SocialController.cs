@@ -223,7 +223,7 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
     }
 
     [HttpGet("leaderboard")]
-    public async Task<IActionResult> Leaderboard([FromQuery] string period = "month", [FromQuery] string metric = "distance")
+    public async Task<IActionResult> Leaderboard([FromQuery] string period = "month", [FromQuery] string metric = "distance", [FromQuery] bool followingOnly = false)
     {
         var start = period switch
         {
@@ -232,10 +232,19 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
             _ => DateTime.UtcNow.AddMonths(-1),
         };
 
-        var query = db.Rides
-            .Include(r => r.User)
-            .Where(r => r.StartedAt >= start)
-            .GroupBy(r => new { r.UserId, r.User!.Pseudo });
+        IQueryable<Ride> baseQuery = db.Rides.Include(r => r.User).Where(r => r.StartedAt >= start);
+
+        if (followingOnly)
+        {
+            var followedIds = await db.Follows
+                .Where(f => f.FollowerId == UserId)
+                .Select(f => f.FollowedId)
+                .ToListAsync();
+            followedIds.Add(UserId);
+            baseQuery = baseQuery.Where(r => followedIds.Contains(r.UserId));
+        }
+
+        var query = baseQuery.GroupBy(r => new { r.UserId, r.User!.Pseudo });
 
         var leaderboard = metric switch
         {
@@ -251,6 +260,16 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
         };
 
         return Ok(leaderboard);
+    }
+
+    [HttpGet("following")]
+    public async Task<IActionResult> GetFollowing()
+    {
+        var ids = await db.Follows
+            .Where(f => f.FollowerId == UserId)
+            .Select(f => f.FollowedId)
+            .ToListAsync();
+        return Ok(ids);
     }
 
     [HttpGet("users")]

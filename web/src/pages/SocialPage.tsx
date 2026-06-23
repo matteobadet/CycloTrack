@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/axios'
@@ -365,22 +365,42 @@ function CommentSection({ rideId, commentCount, topComments, currentUserId }: {
 }
 
 // ---- Feed ride card ----
-function RideCard({ ride, onReact, currentUserId }: {
+function RideCard({ ride, onReact, currentUserId, followingIds, onFollow, onUnfollow }: {
   ride: FeedRide
   onReact: (rideId: string, emoji: string) => void
   currentUserId?: string
+  followingIds: Set<string>
+  onFollow: (id: string) => void
+  onUnfollow: (id: string) => void
 }) {
   return (
     <div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-xl border shadow-sm p-5">
       {/* Header */}
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-sm">
+        <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-sm shrink-0">
           {ride.userPseudo[0]?.toUpperCase()}
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm dark:text-slate-100">{ride.userPseudo}</p>
           <p className="text-xs text-slate-400" title={formatDate(ride.startedAt)}>{timeAgo(ride.startedAt)}</p>
         </div>
+        {ride.userId !== currentUserId && (
+          followingIds.has(ride.userId) ? (
+            <button
+              onClick={() => onUnfollow(ride.userId)}
+              className="text-xs border border-gray-300 dark:border-slate-600 text-gray-500 dark:text-slate-400 px-2.5 py-1 rounded-full hover:border-red-300 hover:text-red-500 transition-colors"
+            >
+              Suivi ✓
+            </button>
+          ) : (
+            <button
+              onClick={() => onFollow(ride.userId)}
+              className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded-full hover:bg-blue-700 transition-colors"
+            >
+              + Suivre
+            </button>
+          )
+        )}
       </div>
 
       {/* Mini map */}
@@ -444,6 +464,7 @@ export default function SocialPage() {
   const [showCreateChallenge, setShowCreateChallenge] = useState(false)
   const [metric, setMetric] = useState<'distance' | 'elevation' | 'watts'>('distance')
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month')
+  const [followingOnly, setFollowingOnly] = useState(false)
   const [search, setSearch] = useState('')
 
   const currentUserId = useAuthStore(s => s.user?.id)
@@ -460,9 +481,15 @@ export default function SocialPage() {
     enabled: tab === 'feed',
   })
 
+  const { data: followingIds = [] } = useQuery<string[]>({
+    queryKey: ['following-ids'],
+    queryFn: () => api.get('/social/following').then(r => r.data),
+  })
+  const followingSet = useMemo(() => new Set(followingIds), [followingIds])
+
   const { data: leaderboard = [], isLoading: lbLoading } = useQuery<LeaderEntry[]>({
-    queryKey: ['leaderboard', metric, period],
-    queryFn: () => api.get(`/social/leaderboard?metric=${metric}&period=${period}`).then(r => r.data),
+    queryKey: ['leaderboard', metric, period, followingOnly],
+    queryFn: () => api.get(`/social/leaderboard?metric=${metric}&period=${period}&followingOnly=${followingOnly}`).then(r => r.data),
     enabled: tab === 'leaderboard',
   })
 
@@ -508,13 +535,13 @@ export default function SocialPage() {
 
   const { mutate: follow } = useMutation({
     mutationFn: (id: string) => api.post(`/social/follow/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['following-ids'] }) },
     onError: () => qc.invalidateQueries({ queryKey: ['users'] }),
   })
 
   const { mutate: unfollow } = useMutation({
     mutationFn: (id: string) => api.delete(`/social/follow/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['following-ids'] }) },
   })
 
   const metricLabel = { distance: 'km', elevation: 'm dénivelé', watts: 'W moy.' }
@@ -566,6 +593,9 @@ export default function SocialPage() {
                   ride={r}
                   onReact={(rideId, emoji) => react({ rideId, emoji })}
                   currentUserId={currentUserId}
+                  followingIds={followingSet}
+                  onFollow={follow}
+                  onUnfollow={unfollow}
                 />
               ))}
             </div>
@@ -576,7 +606,7 @@ export default function SocialPage() {
       {/* Classement */}
       {tab === 'leaderboard' && (
         <div className="max-w-xl">
-          <div className="flex gap-3 mb-4">
+          <div className="flex flex-wrap gap-3 mb-4 items-center">
             <select
               className="border rounded-lg px-3 py-2 text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
               value={metric}
@@ -595,6 +625,16 @@ export default function SocialPage() {
               <option value="month">Ce mois</option>
               <option value="year">Cette année</option>
             </select>
+            <button
+              onClick={() => setFollowingOnly(v => !v)}
+              className={`text-sm px-3 py-2 rounded-lg border transition-colors ${
+                followingOnly
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:border-blue-400'
+              }`}
+            >
+              {followingOnly ? '👥 Mes abonnés' : '🌍 Tout le monde'}
+            </button>
           </div>
 
           {lbLoading ? (
