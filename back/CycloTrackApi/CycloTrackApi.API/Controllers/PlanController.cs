@@ -161,7 +161,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
         var groqReq = new
         {
             model = "llama-3.3-70b-versatile",
-            max_tokens = 2200,
+            max_tokens = 3000,
             messages = new[] { new { role = "user", content = prompt } }
         };
 
@@ -314,6 +314,48 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
             sb.AppendLine(string.Join(" | ", req.KeyPoints.Take(20).Select(p => $"{p.DistKm:F1}km={p.AltM:F0}m")));
         }
 
+        // ── Étapes de l'itinéraire ──
+        if (req.Steps is { Count: > 0 })
+        {
+            // Merge steps that are too short (< 0.3 km) into the next one to avoid noise
+            var merged = new List<StepInfo>();
+            float pendingDist = 0;
+            string? pendingInstruction = null;
+            float pendingCumulative = 0;
+            float? pendingAlt = null;
+            foreach (var s in req.Steps)
+            {
+                pendingDist += s.DistanceKm;
+                pendingInstruction ??= s.Instruction;
+                pendingCumulative = s.CumulativeKm;
+                pendingAlt = s.AltM;
+                if (pendingDist >= 0.3f)
+                {
+                    merged.Add(new StepInfo(pendingInstruction, pendingCumulative, pendingDist, pendingAlt));
+                    pendingDist = 0; pendingInstruction = null;
+                }
+            }
+            if (pendingInstruction != null)
+                merged.Add(new StepInfo(pendingInstruction, pendingCumulative, pendingDist, pendingAlt));
+
+            // Cap at 30 steps for prompt length
+            var stepsToShow = merged.Count > 30 ? merged.Where((_, i) => i % (merged.Count / 30 + 1) == 0).ToList() : merged;
+
+            sb.AppendLine();
+            sb.AppendLine("## Étapes de l'itinéraire (navigation réelle)");
+            sb.AppendLine("Pour chaque étape ci-dessous, tu dois donner : puissance cible (ou % FCmax), zone cardiaque, et éventuellement un conseil tactique ou ravitaillement.");
+            sb.AppendLine();
+            sb.AppendLine("| km | instruction | alt | objectif |");
+            sb.AppendLine("|---|---|---|---|");
+            foreach (var step in stepsToShow)
+            {
+                var altStr = step.AltM.HasValue ? $"{step.AltM:F0}m" : "—";
+                sb.AppendLine($"| {step.CumulativeKm:F1} | {step.Instruction} | {altStr} | ← à compléter |");
+            }
+            sb.AppendLine();
+            sb.AppendLine("→ Remplace '← à compléter' par des objectifs concrets pour chaque étape.");
+        }
+
         // ── POIs placés sur la carte ──
         if (req.Pois is { Count: > 0 })
         {
@@ -380,13 +422,24 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
             sb.AppendLine("- Moment de ravitaillement (avant la montée, après le sommet)");
             sb.AppendLine("- Piège à éviter (partir trop fort, se laisser décrocher…)");
             sb.AppendLine();
-            sb.AppendLine("### 3. Plan km par km");
+        }
+        if (req.Steps is { Count: > 0 })
+        {
+            sb.AppendLine(req.Cols is { Count: > 0 } ? "### 3. Objectifs par étape de navigation" : "### 2. Objectifs par étape de navigation");
+            sb.AppendLine("Reprends le tableau d'étapes fourni et complète la colonne 'objectif' avec :");
+            sb.AppendLine("- Puissance en W (ou % FTP) OU % FCmax si pas de capteur puissance");
+            sb.AppendLine("- Zone cardiaque (Z1-Z5)");
+            sb.AppendLine("- Un mot-clé tactique si pertinent (ex: 'gérer', 'relancer', 'boire', 'gel')");
+            sb.AppendLine("Formate en tableau Markdown.");
+            sb.AppendLine();
+            var nextSectionNum = (req.Cols is { Count: > 0 } ? 4 : 3);
+            sb.AppendLine($"### {nextSectionNum}. Plan global par phases");
         }
         else
         {
-            sb.AppendLine("### 2. Plan par étapes");
+            sb.AppendLine(req.Cols is { Count: > 0 } ? "### 3. Plan global par phases" : "### 2. Plan global par phases");
         }
-        sb.AppendLine("Divise la sortie en 3-5 étapes (km X→Y). Pour chaque étape : terrain, puissance/FC cible, ravitaillement, conseil tactique.");
+        sb.AppendLine("Divise la sortie en 3-5 phases (km X→Y). Pour chaque phase : terrain, puissance/FC cible, ravitaillement, conseil tactique.");
         sb.AppendLine();
         sb.AppendLine("### 4. Préparation (veille + matin du départ)");
         sb.AppendLine("- Repas du soir avec quantités");
@@ -411,6 +464,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
 public record ElevPoint(float DistKm, float AltM);
 public record ColInfo(float StartKm, float EndKm, float LengthKm, float GainM, float AvgGradientPct, int SummitAlt);
 public record PoiInfo(string Type, string? Label);
+public record StepInfo(string Instruction, float CumulativeKm, float DistanceKm, float? AltM = null);
 public record RecentRide(DateTime StartedAt, float DistanceKm, float ElevationGainM, int DurationSec);
 public record WeatherInfo(float TempMin, float TempMax, float WindKmh, float PrecipPct);
 
@@ -424,6 +478,7 @@ public record PlanRequest(
     List<ElevPoint>? KeyPoints = null,
     List<ColInfo>? Cols = null,
     List<PoiInfo>? Pois = null,
+    List<StepInfo>? Steps = null,
     float? StartLat = null,
     float? StartLng = null
 );

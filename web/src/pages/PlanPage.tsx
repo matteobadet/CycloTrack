@@ -227,6 +227,17 @@ export default function PlanPage() {
         keyPoints: route.keyPoints,
         cols: cols.length > 0 ? cols : undefined,
         pois: pois.length > 0 ? pois.map(p => ({ type: p.type, label: p.label })) : undefined,
+        steps: route.steps.length > 0 ? route.steps.map(s => {
+          const cumKm = s.cumulativeM / 1000
+          // Interpolate altitude from elevProfile at this cumulative distance
+          const ep = route.elevProfile
+          const after = ep.find(p => p.dist >= cumKm)
+          const before = [...ep].reverse().find(p => p.dist <= cumKm)
+          const altM = after && before
+            ? (after.dist === before.dist ? after.alt : before.alt + (after.alt - before.alt) * ((cumKm - before.dist) / (after.dist - before.dist)))
+            : (after?.alt ?? before?.alt ?? null)
+          return { instruction: s.instruction, cumulativeKm: cumKm, distanceKm: s.distanceM / 1000, altM }
+        }) : undefined,
         startLat: startCoord?.[0],
         startLng: startCoord?.[1],
       })
