@@ -87,11 +87,14 @@ function difficultyLabel(gainM: number, gradPct: number): { label: string; color
   return { label: 'Cat. 4', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400' }
 }
 
+export interface ClimbSegment { startKm: number; endKm: number }
+
 interface Props {
   elevProfile: ElevPoint[]
+  onClimbHover?: (climb: ClimbSegment | null) => void
 }
 
-export default function ColStats({ elevProfile }: Props) {
+export default function ColStats({ elevProfile, onClimbHover }: Props) {
   const cols = detectCols(elevProfile)
   if (cols.length === 0) return null
 
@@ -106,7 +109,12 @@ export default function ColStats({ elevProfile }: Props) {
         {cols.map((col, i) => {
           const diff = difficultyLabel(col.gainM, col.avgGradientPct)
           return (
-            <div key={i} className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-slate-700/40 rounded-lg">
+            <div
+              key={i}
+              className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-slate-700/40 rounded-lg cursor-default transition-colors hover:bg-orange-50 dark:hover:bg-orange-900/20"
+              onMouseEnter={() => onClimbHover?.({ startKm: col.startKm, endKm: col.endKm })}
+              onMouseLeave={() => onClimbHover?.(null)}
+            >
               <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Mountain size={15} className="text-orange-500" />
               </div>

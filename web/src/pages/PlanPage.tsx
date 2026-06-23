@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMapEvents } from 'react-leaflet'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
-import ColStats from '@/components/ColStats'
+import ColStats, { ClimbSegment } from '@/components/ColStats'
 import WeatherForecast from '@/components/WeatherForecast'
 import L from 'leaflet'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
@@ -118,6 +118,16 @@ export default function PlanPage() {
   const [pendingPoiType, setPendingPoiType] = useState<PlanPoi['type']>('fontaine')
   const [pendingPoiLabel, setPendingPoiLabel] = useState('')
   const gpxInputRef = useRef<HTMLInputElement>(null)
+  const [hoveredClimb, setHoveredClimb] = useState<ClimbSegment | null>(null)
+
+  const highlightedCoords = hoveredClimb && route && route.elevProfile.length > 1 ? (() => {
+    const totalKm = route.elevProfile[route.elevProfile.length - 1].dist
+    if (totalKm === 0) return null
+    const n = route.coords.length
+    const startIdx = Math.max(0, Math.floor((hoveredClimb.startKm / totalKm) * n))
+    const endIdx = Math.min(n - 1, Math.ceil((hoveredClimb.endKm / totalKm) * n))
+    return route.coords.slice(startIdx, endIdx + 1) as [number, number][]
+  })() : null
 
 
   async function handleGpxImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -317,6 +327,9 @@ export default function PlanPage() {
             onPoiClick={(lat, lng) => { setPendingPoi({ lat, lng }); setPendingPoiLabel('') }}
           />
           {route && <GradientPolyline coords={route.coords} elevations={route.elevations} />}
+          {highlightedCoords && highlightedCoords.length > 1 && (
+            <Polyline positions={highlightedCoords} color="#f97316" weight={6} opacity={0.85} />
+          )}
           {editMode && waypoints.map((wp, i) => (
             <Marker key={i} position={wp} draggable icon={startIcon}
               eventHandlers={{ dragend: (e: any) => { const ll = e.target.getLatLng(); updateWaypoint(i, ll.lat, ll.lng) } }}
@@ -450,7 +463,7 @@ export default function PlanPage() {
           )}
 
           {/* Statistiques de col */}
-          {route.elevProfile.length > 1 && <ColStats elevProfile={route.elevProfile} />}
+          {route.elevProfile.length > 1 && <ColStats elevProfile={route.elevProfile} onClimbHover={setHoveredClimb} />}
 
           {/* Météo prévue */}
           {plannedAt && route.coords.length > 0 && (

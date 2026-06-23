@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { computeRoute, decodePolyline, RouteData, elevationsFromProfile } from '@/lib/routing'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
-import ColStats from '@/components/ColStats'
+import ColStats, { ClimbSegment } from '@/components/ColStats'
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Brain, Pencil, Copy, X, Check, MapPin, Trash2, Edit2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -63,6 +63,7 @@ export default function PlanDetailPage() {
   const [routeError, setRouteError] = useState<string | null>(null)
 
   const [duplicating, setDuplicating] = useState(false)
+  const [hoveredClimb, setHoveredClimb] = useState<ClimbSegment | null>(null)
 
   useEffect(() => {
     api.get(`/plan/${id}`).then(r => setPlan(r.data)).finally(() => setLoading(false))
@@ -89,6 +90,19 @@ export default function PlanDetailPage() {
     try { return JSON.parse(plan.elevationJson) as { dist: number; alt: number }[] }
     catch { return [] }
   }, [newRoute, plan?.elevationJson])
+
+  // Coords of the hovered climb segment (based on km fraction of total route)
+  const highlightedCoords = useMemo(() => {
+    if (!hoveredClimb || coordsForElevation.length < 2 || elevProfile.length < 2) return null
+    const totalKm = elevProfile[elevProfile.length - 1].dist
+    if (totalKm === 0) return null
+    const startFrac = hoveredClimb.startKm / totalKm
+    const endFrac = hoveredClimb.endKm / totalKm
+    const n = coordsForElevation.length
+    const startIdx = Math.max(0, Math.floor(startFrac * n))
+    const endIdx = Math.min(n - 1, Math.ceil(endFrac * n))
+    return coordsForElevation.slice(startIdx, endIdx + 1) as [number, number][]
+  }, [hoveredClimb, coordsForElevation, elevProfile])
 
   async function markComplete() {
     await api.patch(`/plan/${id}/complete`)
@@ -296,6 +310,9 @@ export default function PlanDetailPage() {
               {coords.length > 0 && displayElevations.length === 0 && (
                 <GradientPolyline coords={coords} elevations={new Array(coords.length).fill(0)} />
               )}
+              {highlightedCoords && highlightedCoords.length > 1 && (
+                <Polyline positions={highlightedCoords} color="#f97316" weight={6} opacity={0.85} />
+              )}
               {mapEditMode && waypoints.map((wp, i) => (
                 <Marker key={i} position={wp} draggable icon={markerIcon}
                   eventHandlers={{ dragend: (e: any) => { const ll = e.target.getLatLng(); setWaypoints(p => p.map((w, idx) => idx === i ? [ll.lat, ll.lng] : w)) } }}
@@ -325,7 +342,7 @@ export default function PlanDetailPage() {
           {coords.length > 0 && !mapEditMode && <GradientLegend className="mt-3" />}
 
           {/* Col stats */}
-          {elevProfile.length > 1 && <ColStats elevProfile={elevProfile} />}
+          {elevProfile.length > 1 && <ColStats elevProfile={elevProfile} onClimbHover={setHoveredClimb} />}
 
           {/* Waypoint editor panel */}
           {editing && mapEditMode && (
