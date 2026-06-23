@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMapEvents } from 'react-leaflet'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
-import ColStats, { ClimbSegment } from '@/components/ColStats'
+import ColStats, { ClimbSegment, detectCols } from '@/components/ColStats'
 import WeatherForecast from '@/components/WeatherForecast'
 import L from 'leaflet'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
@@ -206,6 +206,17 @@ export default function PlanPage() {
     if (!route) return
     setLoadingAi(true)
     try {
+      const cols = route.elevProfile.length > 1 ? detectCols(route.elevProfile).map(c => ({
+        startKm: c.startKm,
+        endKm: c.endKm,
+        lengthKm: c.lengthKm,
+        gainM: c.gainM,
+        avgGradientPct: c.avgGradientPct,
+        summitAlt: c.summitAlt,
+      })) : []
+
+      const startCoord = route.coords[0]
+
       const res = await api.post('/plan/ai', {
         distanceKm: route.distanceKm,
         elevationGainM: route.elevationGainM,
@@ -214,6 +225,10 @@ export default function PlanPage() {
         difficulty,
         plannedAt: plannedAt ? new Date(plannedAt).toISOString() : undefined,
         keyPoints: route.keyPoints,
+        cols: cols.length > 0 ? cols : undefined,
+        pois: pois.length > 0 ? pois.map(p => ({ type: p.type, label: p.label })) : undefined,
+        startLat: startCoord?.[0],
+        startLng: startCoord?.[1],
       })
       setAiAdvice(res.data.advice)
     } catch {

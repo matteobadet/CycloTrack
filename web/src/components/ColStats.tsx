@@ -12,7 +12,7 @@ interface Col {
   avgGradientPct: number
 }
 
-function detectCols(profile: ElevPoint[]): Col[] {
+export function detectCols(profile: ElevPoint[]): Col[] {
   if (profile.length < 4) return []
 
   // Smooth profile with a 3-point moving average to reduce noise
