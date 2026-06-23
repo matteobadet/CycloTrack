@@ -1,14 +1,15 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MapContainer, TileLayer, Polyline } from 'react-leaflet'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { Ride, RidePoint } from '@/lib/types'
 import { formatDuration, formatDate } from '@/lib/utils'
-import { Brain, Loader2, ArrowLeft } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { Brain, Loader2, ArrowLeft, Trophy } from 'lucide-react'
+import AiCoachAnalysis from '@/components/AiCoachAnalysis'
+import RidePerformanceChart from '@/components/RidePerformanceChart'
+import HrZonesChart from '@/components/HrZonesChart'
+import { useAuthStore } from '@/stores/authStore'
 
 interface MusicInsight {
   emoji: string
@@ -33,6 +34,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 export default function RideDetailPage() {
   const { id } = useParams<{ id: string }>()
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+
+  const { data: similar } = useQuery<{
+    count: number
+    best: { id: string; startedAt: string; distanceKm: number; durationSec: number; avgSpeedKmh: number } | null
+    history: { id: string; startedAt: string; distanceKm: number; durationSec: number; avgSpeedKmh: number }[]
+  }>({
+    queryKey: ['ride-similar', id],
+    queryFn: () => api.get(`/rides/${id}/similar`).then(r => r.data),
+    enabled: !!id,
+  })
 
   const { data, isLoading } = useQuery<RideDetail>({
     queryKey: ['ride', id],
@@ -50,14 +62,6 @@ export default function RideDetailPage() {
   const { ride, points, musicInsights } = data
   const coords = points.map(p => [p.lat, p.lng] as [number, number])
   const center = coords.length ? coords[Math.floor(coords.length / 2)] : [46.2, 2.2] as [number, number]
-
-  // Données graphiques altitude / vitesse
-  const chartData = points.filter((_, i) => i % 5 === 0).map(p => ({
-    alt: p.altitudeM ? Math.round(p.altitudeM) : null,
-    speed: p.speedKmh ? parseFloat(p.speedKmh.toFixed(1)) : null,
-    watts: p.watts ?? null,
-    bpm: p.bpm ?? null,
-  }))
 
   return (
     <div className="p-8 max-w-4xl">
@@ -93,24 +97,19 @@ export default function RideDetailPage() {
         {ride.maxBpm != null && <Stat label="FC max" value={`${ride.maxBpm} bpm`} />}
       </div>
 
-      {/* Graphique altitude */}
-      {chartData.some(d => d.alt != null) && (
+      {/* Graphique performance superposé */}
+      {points.length > 1 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5 mb-6">
-          <h2 className="font-semibold mb-3 text-gray-700 dark:text-slate-200">Profil altimétrique (m)</h2>
-          <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gAlt" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis hide />
-              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v) => [`${v} m`, 'Altitude']} />
-              <Area type="monotone" dataKey="alt" stroke="#f97316" fill="url(#gAlt)" strokeWidth={2} dot={false} connectNulls />
-            </AreaChart>
-          </ResponsiveContainer>
+          <h2 className="font-semibold mb-3 text-gray-700 dark:text-slate-200">Analyse de performance</h2>
+          <RidePerformanceChart points={points} />
+        </div>
+      )}
+
+      {/* Zones d'effort FC */}
+      {points.some(p => p.bpm != null) && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5 mb-6">
+          <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200">Zones d'effort cardiaques</h2>
+          <HrZonesChart points={points} maxHrBpm={user?.maxHrBpm} />
         </div>
       )}
 
@@ -150,6 +149,61 @@ export default function RideDetailPage() {
         </div>
       )}
 
+      {/* Comparaison sorties similaires */}
+      {similar && similar.count > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5 mb-6">
+          <h2 className="font-semibold mb-4 text-gray-700 dark:text-slate-200 flex items-center gap-2">
+            <Trophy size={16} className="text-yellow-500" />
+            Sorties similaires
+            <span className="text-xs font-normal text-gray-400 dark:text-slate-500">
+              — {similar.count} fois ce trajet
+            </span>
+          </h2>
+
+          {/* Record personnel */}
+          {similar.best && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg px-4 py-3 mb-4 flex items-center gap-4">
+              <span className="text-2xl">🏆</span>
+              <div className="flex-1">
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 font-semibold uppercase tracking-wide mb-0.5">
+                  Ton record
+                </p>
+                <p className="text-sm font-bold text-gray-800 dark:text-white">
+                  {formatDuration(similar.best.durationSec)} — {similar.best.avgSpeedKmh.toFixed(1)} km/h moy.
+                </p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">
+                  {formatDate(similar.best.startedAt)}
+                </p>
+              </div>
+              {/* Compare with current ride */}
+              {similar.best.id !== id && ride && (
+                <div className="text-right">
+                  <p className={`text-sm font-bold ${ride.durationSec <= similar.best.durationSec ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                    {ride.durationSec <= similar.best.durationSec ? '🎉 Nouveau record !' : `+${formatDuration(ride.durationSec - similar.best.durationSec)}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Historique */}
+          <div className="space-y-2">
+            {similar.history.slice(0, 5).map((r, i) => (
+              <Link key={r.id} to={`/rides/${r.id}`}
+                className="flex items-center gap-3 text-sm p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+                <span className="text-gray-400 dark:text-slate-500 w-4 text-right">{i + 1}</span>
+                <span className="text-gray-500 dark:text-slate-400 flex-1">
+                  {new Date(r.startedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })}
+                </span>
+                <span className="font-medium text-gray-800 dark:text-white">{formatDuration(r.durationSec)}</span>
+                <span className="text-gray-400 dark:text-slate-500">{r.avgSpeedKmh.toFixed(1)} km/h</span>
+                {r.id === similar.best?.id && <span className="text-yellow-500 text-xs">🏆</span>}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Bilan IA */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
@@ -169,9 +223,7 @@ export default function RideDetailPage() {
           )}
         </div>
         {ride.aiAnalysis ? (
-          <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{ride.aiAnalysis}</ReactMarkdown>
-          </div>
+          <AiCoachAnalysis analysis={ride.aiAnalysis} />
         ) : (
           <p className="text-sm text-gray-400 dark:text-slate-500">Cliquez sur "Obtenir le bilan coach" pour recevoir une analyse personnalisée.</p>
         )}

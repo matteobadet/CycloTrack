@@ -349,6 +349,82 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
         return NoContent();
     }
 
+    // GET /rides/{id}/similar — find past rides by same user on a similar route
+    [HttpGet("{id:guid}/similar")]
+    public async Task<ActionResult<object>> GetSimilar(Guid id)
+    {
+        var ride = await db.Rides
+            .Include(r => r.Points)
+            .FirstOrDefaultAsync(r => r.Id == id && r.UserId == UserId);
+        if (ride is null) return NotFound();
+
+        // Need a reference start point — use first GPS point
+        var firstPoint = ride.Points.OrderBy(p => p.Timestamp).FirstOrDefault();
+        if (firstPoint is null) return Ok(new { similar = Array.Empty<object>() });
+
+        var refLat = firstPoint.Lat;
+        var refLng = firstPoint.Lng;
+        var minDist = ride.DistanceKm * 0.7f;
+        var maxDist = ride.DistanceKm * 1.3f;
+
+        // Candidate rides: same user, similar distance, different ride
+        var candidates = await db.Rides
+            .Where(r => r.UserId == UserId && r.Id != id && r.DistanceKm >= minDist && r.DistanceKm <= maxDist)
+            .OrderByDescending(r => r.StartedAt)
+            .Take(50)
+            .Select(r => new { r.Id, r.StartedAt, r.DistanceKm, r.DurationSec, r.AvgSpeedKmh, r.ElevationGainM })
+            .ToListAsync();
+
+        if (!candidates.Any()) return Ok(new { similar = Array.Empty<object>() });
+
+        // Filter by start proximity (first GPS point within ~1.5 km)
+        var candidateIds = candidates.Select(c => c.Id).ToList();
+        var firstPoints = await db.RidePoints
+            .Where(p => candidateIds.Contains(p.RideId))
+            .GroupBy(p => p.RideId)
+            .Select(g => new { RideId = g.Key, Lat = g.OrderBy(p => p.Timestamp).First().Lat, Lng = g.OrderBy(p => p.Timestamp).First().Lng })
+            .ToListAsync();
+
+        const double R = 6371000;
+        static double Haversine(double lat1, double lng1, double lat2, double lng2)
+        {
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLng = (lng2 - lng1) * Math.PI / 180;
+            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                    Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
+                    Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+            return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        }
+
+        var nearbyIds = firstPoints
+            .Where(p => Haversine(refLat, refLng, p.Lat, p.Lng) <= 1500)
+            .Select(p => p.RideId)
+            .ToHashSet();
+
+        var similar = candidates
+            .Where(c => nearbyIds.Contains(c.Id))
+            .Select(c => new
+            {
+                id = c.Id,
+                startedAt = c.StartedAt,
+                distanceKm = c.DistanceKm,
+                durationSec = c.DurationSec,
+                avgSpeedKmh = c.AvgSpeedKmh,
+                elevationGainM = c.ElevationGainM,
+            })
+            .ToList();
+
+        // Best performance = shortest duration for similar distance
+        var best = similar.OrderBy(r => r.durationSec).FirstOrDefault();
+
+        return Ok(new
+        {
+            count = similar.Count,
+            best = best,
+            history = similar,
+        });
+    }
+
     private static RideDto ToDto(Ride r) => new(
         r.Id, r.UserId, r.User?.Pseudo ?? string.Empty,
         r.StartedAt, r.EndedAt, r.DistanceKm, r.DurationSec,

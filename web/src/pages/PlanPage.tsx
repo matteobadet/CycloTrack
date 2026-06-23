@@ -1,14 +1,38 @@
-import { useState } from 'react'
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import { useState, useRef } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
+import ColStats from '@/components/ColStats'
+import WeatherForecast from '@/components/WeatherForecast'
 import L from 'leaflet'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { computeRoute, RouteData } from '@/lib/routing'
-import { Loader2, MapPin, Brain, AlertCircle, Save, Calendar, Trash2, Edit2, Check } from 'lucide-react'
+import { parseGpx } from '@/lib/gpx'
+import { Loader2, MapPin, Brain, AlertCircle, Save, Calendar, Trash2, Edit2, Check, Upload } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+
+export interface PlanPoi {
+  lat: number
+  lng: number
+  type: 'fontaine' | 'cafe' | 'vue' | 'danger'
+  label: string
+}
+
+const POI_TYPES: { value: PlanPoi['type']; emoji: string; label: string }[] = [
+  { value: 'fontaine', emoji: '💧', label: 'Fontaine' },
+  { value: 'cafe',     emoji: '☕', label: 'Café / ravito' },
+  { value: 'vue',      emoji: '👀', label: 'Vue panoramique' },
+  { value: 'danger',   emoji: '⚠️', label: 'Danger / attention' },
+]
+
+const POI_ICON: Record<PlanPoi['type'], L.DivIcon> = Object.fromEntries(
+  POI_TYPES.map(p => [
+    p.value,
+    L.divIcon({ html: `<div style="font-size:22px;line-height:1;">${p.emoji}</div>`, className: '', iconSize: [28, 28], iconAnchor: [14, 28] })
+  ])
+) as Record<PlanPoi['type'], L.DivIcon>
 
 // Fix default Leaflet icon
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -59,10 +83,12 @@ function parseWaypoints(url: string): [number, number][] {
 }
 
 
-// Component that handles map click for adding waypoints
-function MapClickHandler({ editMode, onMapClick }: { editMode: boolean; onMapClick: (lat: number, lng: number) => void }) {
+function MapClickHandler({ editMode, poiMode, onMapClick, onPoiClick }: { editMode: boolean; poiMode: boolean; onMapClick: (lat: number, lng: number) => void; onPoiClick: (lat: number, lng: number) => void }) {
   useMapEvents({
-    click(e) { if (editMode) onMapClick(e.latlng.lat, e.latlng.lng) }
+    click(e) {
+      if (poiMode) onPoiClick(e.latlng.lat, e.latlng.lng)
+      else if (editMode) onMapClick(e.latlng.lat, e.latlng.lng)
+    }
   })
   return null
 }
@@ -85,7 +111,32 @@ export default function PlanPage() {
   const [loadingAi, setLoadingAi] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
+  // POI state
+  const [pois, setPois] = useState<PlanPoi[]>([])
+  const [poiMode, setPoiMode] = useState(false)
+  const [pendingPoi, setPendingPoi] = useState<{ lat: number; lng: number } | null>(null)
+  const [pendingPoiType, setPendingPoiType] = useState<PlanPoi['type']>('fontaine')
+  const [pendingPoiLabel, setPendingPoiLabel] = useState('')
+  const gpxInputRef = useRef<HTMLInputElement>(null)
 
+
+  async function handleGpxImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError(null); setAiAdvice(null); setSavedId(null)
+    setLoading(true)
+    try {
+      const text = await file.text()
+      const gpxData = parseGpx(text)
+      setRoute(gpxData as any)
+      setWaypoints([gpxData.coords[0], gpxData.coords[gpxData.coords.length - 1]])
+    } catch (e: any) {
+      setError(e.message ?? 'Erreur lors de l\'import GPX.')
+    } finally {
+      setLoading(false)
+      if (gpxInputRef.current) gpxInputRef.current.value = ''
+    }
+  }
 
   async function handleAnalyze() {
     setError(null); setRoute(null); setAiAdvice(null); setSavedId(null)
@@ -176,8 +227,9 @@ export default function PlanPage() {
         routePolyline: route.encodedPolyline,
         googleMapsUrl: url || undefined,
         aiAdvice: aiAdvice || undefined,
-        routeStepsJson: JSON.stringify(route.steps),
+        routeStepsJson: JSON.stringify((route as any).steps ?? []),
         elevationJson: JSON.stringify(route.elevProfile),
+        poisJson: pois.length > 0 ? JSON.stringify(pois) : undefined,
       })
       setSavedId(res.data.id)
     } catch {
@@ -199,7 +251,7 @@ export default function PlanPage() {
       <h1 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">Planifier une sortie</h1>
       <p className="text-gray-400 dark:text-slate-500 text-sm mb-6">Colle un lien Google Maps ou dessine ton itinéraire à la main.</p>
 
-      {/* URL + Analyze */}
+      {/* URL + Analyze + GPX import */}
       <div className="flex gap-3 mb-4">
         <input value={url} onChange={e => setUrl(e.target.value)}
           placeholder="https://www.google.fr/maps/dir/..."
@@ -210,6 +262,11 @@ export default function PlanPage() {
           {loading ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
           {loading ? 'Analyse...' : 'Analyser URL'}
         </button>
+        <button onClick={() => gpxInputRef.current?.click()} disabled={loading}
+          className="flex items-center gap-2 border dark:border-slate-600 bg-white dark:bg-slate-800 text-gray-700 dark:text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap">
+          <Upload size={15} /> Import GPX
+        </button>
+        <input ref={gpxInputRef} type="file" accept=".gpx" className="hidden" onChange={handleGpxImport} />
       </div>
 
       {/* Title + Date */}
@@ -254,17 +311,38 @@ export default function PlanPage() {
       <div className="rounded-xl overflow-hidden border dark:border-slate-700 h-80 mb-4 relative">
         <MapContainer center={center} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          <MapClickHandler editMode={editMode} onMapClick={handleMapClick} />
+          <MapClickHandler
+            editMode={editMode} poiMode={poiMode}
+            onMapClick={handleMapClick}
+            onPoiClick={(lat, lng) => { setPendingPoi({ lat, lng }); setPendingPoiLabel('') }}
+          />
           {route && <GradientPolyline coords={route.coords} elevations={route.elevations} />}
           {editMode && waypoints.map((wp, i) => (
             <Marker key={i} position={wp} draggable icon={startIcon}
               eventHandlers={{ dragend: (e: any) => { const ll = e.target.getLatLng(); updateWaypoint(i, ll.lat, ll.lng) } }}
             />
           ))}
+          {pois.map((poi, i) => (
+            <Marker key={`poi-${i}`} position={[poi.lat, poi.lng]} icon={POI_ICON[poi.type]}>
+              <Popup>
+                <div className="text-sm">
+                  <p className="font-semibold">{POI_TYPES.find(t => t.value === poi.type)?.emoji} {poi.label || POI_TYPES.find(t => t.value === poi.type)?.label}</p>
+                  <button onClick={() => setPois(p => p.filter((_, idx) => idx !== i))} className="text-xs text-red-500 hover:underline mt-1">Supprimer</button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
         </MapContainer>
-        {/* Edit toolbar overlay */}
+
+        {/* Toolbar overlay */}
         <div className="absolute bottom-3 right-3 z-[1000] flex gap-2">
-          <button onClick={() => setEditMode(e => !e)}
+          {route && (
+            <button onClick={() => { setPoiMode(m => !m); setEditMode(false); setPendingPoi(null) }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shadow-md ${poiMode ? 'bg-purple-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-white border dark:border-slate-600'}`}>
+              📍 {poiMode ? 'Ajout POI ON' : 'Ajouter POI'}
+            </button>
+          )}
+          <button onClick={() => { setEditMode(e => !e); setPoiMode(false); setPendingPoi(null) }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shadow-md ${editMode ? 'bg-orange-500 text-white' : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-white border dark:border-slate-600'}`}>
             <Edit2 size={12} />{editMode ? 'Mode édition ON' : 'Modifier itinéraire'}
           </button>
@@ -275,6 +353,36 @@ export default function PlanPage() {
             </button>
           )}
         </div>
+
+        {/* POI placement popup */}
+        {pendingPoi && (
+          <div className="absolute bottom-14 left-3 z-[1001] bg-white dark:bg-slate-800 rounded-xl shadow-xl border dark:border-slate-700 p-4 w-64">
+            <p className="text-sm font-semibold text-gray-800 dark:text-white mb-2">Ajouter un point d'intérêt</p>
+            <div className="grid grid-cols-2 gap-1 mb-3">
+              {POI_TYPES.map(pt => (
+                <button key={pt.value} onClick={() => setPendingPoiType(pt.value)}
+                  className={`text-xs px-2 py-1.5 rounded-lg border text-left flex items-center gap-1 ${pendingPoiType === pt.value ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : 'border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300'}`}>
+                  {pt.emoji} {pt.label}
+                </button>
+              ))}
+            </div>
+            <input value={pendingPoiLabel} onChange={e => setPendingPoiLabel(e.target.value)}
+              placeholder="Note (optionnel)"
+              className="w-full text-xs border dark:border-slate-600 rounded-lg px-2 py-1.5 mb-2 bg-white dark:bg-slate-700 text-gray-800 dark:text-white focus:outline-none"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => {
+                setPois(p => [...p, { lat: pendingPoi.lat, lng: pendingPoi.lng, type: pendingPoiType, label: pendingPoiLabel }])
+                setPendingPoi(null)
+              }} className="flex-1 bg-purple-600 text-white text-xs py-1.5 rounded-lg font-medium hover:bg-purple-700">
+                Ajouter
+              </button>
+              <button onClick={() => setPendingPoi(null)} className="px-3 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700">
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Gradient legend */}
@@ -339,6 +447,18 @@ export default function PlanPage() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+          )}
+
+          {/* Statistiques de col */}
+          {route.elevProfile.length > 1 && <ColStats elevProfile={route.elevProfile} />}
+
+          {/* Météo prévue */}
+          {plannedAt && route.coords.length > 0 && (
+            <WeatherForecast
+              lat={route.coords[0][0]}
+              lng={route.coords[0][1]}
+              plannedAt={new Date(plannedAt).toISOString()}
+            />
           )}
 
           {/* AI advice */}

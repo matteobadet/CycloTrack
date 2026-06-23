@@ -29,7 +29,9 @@ builder.Services.AddCors(options =>
 
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
-builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connectionString));
+builder.Services.AddDbContext<AppDbContext>(opt => opt
+    .UseNpgsql(connectionString)
+    .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // JWT
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()!;

@@ -49,7 +49,7 @@ export class NavigationService {
   readonly elevProfile: ElevPoint[]
   // Cumulative distances at each route point (m)
   private readonly cumDist: number[]
-  private readonly totalDistM: number
+  readonly totalDistM: number
 
   constructor(polyline: string, stepsJson: string, elevJson: string) {
     this.routeCoords = decodePolyline(polyline)
@@ -69,6 +69,17 @@ export class NavigationService {
       this.cumDist.push(this.cumDist[i - 1] + haversineM(lat1, lng1, lat2, lng2))
     }
     this.totalDistM = this.cumDist[this.cumDist.length - 1] || 0
+  }
+
+  // Returns the distance (m) from the given position to the nearest point on the route
+  minDistToRouteM(lat: number, lng: number): number {
+    let best = Infinity
+    for (const [rlat, rlng] of this.routeCoords) {
+      const d = haversineM(lat, lng, rlat, rlng)
+      if (d < best) best = d
+      if (d > 500 && best < 50) break
+    }
+    return best
   }
 
   // Find index of closest route point to current position

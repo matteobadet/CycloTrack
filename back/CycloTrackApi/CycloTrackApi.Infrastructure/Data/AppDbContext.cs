@@ -15,6 +15,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PlannedRide> PlannedRides => Set<PlannedRide>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
+    public DbSet<Challenge> Challenges => Set<Challenge>();
+    public DbSet<ChallengeParticipant> ChallengeParticipants => Set<ChallengeParticipant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,5 +44,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
             .IsUnique();
+
+        modelBuilder.Entity<ChallengeParticipant>()
+            .HasKey(cp => new { cp.ChallengeId, cp.UserId });
+
+        modelBuilder.Entity<ChallengeParticipant>()
+            .HasOne(cp => cp.Challenge)
+            .WithMany(c => c.Participants)
+            .HasForeignKey(cp => cp.ChallengeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ChallengeParticipant>()
+            .HasOne(cp => cp.User)
+            .WithMany()
+            .HasForeignKey(cp => cp.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

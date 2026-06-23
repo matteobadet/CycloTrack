@@ -166,6 +166,9 @@ namespace CycloTrackApi.Infrastructure.Migrations
                     b.Property<string>("GoogleMapsUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("PoisJson")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsCompleted")
                         .HasColumnType("boolean");
 

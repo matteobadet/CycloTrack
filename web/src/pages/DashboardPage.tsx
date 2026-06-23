@@ -5,6 +5,7 @@ import { api } from '@/lib/axios'
 import { Stats, Ride } from '@/lib/types'
 import { formatDuration, formatDateShort } from '@/lib/utils'
 import StatCard from '@/components/StatCard'
+import MonthlyProgressChart from '@/components/MonthlyProgressChart'
 import { Bike, TrendingUp, Mountain, Flame } from 'lucide-react'
 
 export default function DashboardPage() {
@@ -114,6 +115,9 @@ export default function DashboardPage() {
           )}
         </div>
       )}
+
+      {/* Progression mensuelle */}
+      {rides.length >= 2 && <MonthlyProgressChart rides={rides} />}
 
       {/* Dernières sorties */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 p-5">

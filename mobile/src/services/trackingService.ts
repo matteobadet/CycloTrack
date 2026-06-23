@@ -28,6 +28,9 @@ export interface TrackStats {
 
 type StatsCallback = (stats: TrackStats, points: TrackPoint[]) => void
 
+const GPS_NORMAL: Location.LocationOptions = { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 }
+const GPS_SAVER: Location.LocationOptions = { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 15 }
+
 class TrackingService {
   private points: TrackPoint[] = []
   private subscription: Location.LocationSubscription | null = null
@@ -38,10 +41,33 @@ class TrackingService {
     { watts: null, bpm: null, cadenceRpm: null }
   private statsCallback: StatsCallback | null = null
   private intervalId: ReturnType<typeof setInterval> | null = null
+  private gpsOptions: Location.LocationOptions = GPS_NORMAL
+  private isTracking = false
 
   async requestPermissions(): Promise<boolean> {
     const { status } = await Location.requestForegroundPermissionsAsync()
     return status === 'granted'
+  }
+
+  async setBatterySaver(enabled: boolean) {
+    this.gpsOptions = enabled ? GPS_SAVER : GPS_NORMAL
+    if (this.isTracking && this.subscription) {
+      this.subscription.remove()
+      this.subscription = await Location.watchPositionAsync(this.gpsOptions, loc => this.onLocation(loc))
+    }
+  }
+
+  private onLocation(location: Location.LocationObject) {
+    const point: TrackPoint = {
+      timestamp: location.timestamp,
+      lat: location.coords.latitude,
+      lng: location.coords.longitude,
+      altitudeM: location.coords.altitude,
+      speedKmh: location.coords.speed !== null ? location.coords.speed * 3.6 : null,
+      ...this.currentBle,
+    }
+    this.points.push(point)
+    this.emitStats()
   }
 
   async start(onStats: StatsCallback) {
@@ -50,23 +76,9 @@ class TrackingService {
     this.pausedDuration = 0
     this.pauseStart = null
     this.statsCallback = onStats
+    this.isTracking = true
 
-    this.subscription = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
-      (location) => {
-        const point: TrackPoint = {
-          timestamp: location.timestamp,
-          lat: location.coords.latitude,
-          lng: location.coords.longitude,
-          altitudeM: location.coords.altitude,
-          speedKmh: location.coords.speed !== null ? location.coords.speed * 3.6 : null,
-          ...this.currentBle,
-        }
-        this.points.push(point)
-        this.emitStats()
-      },
-    )
-
+    this.subscription = await Location.watchPositionAsync(this.gpsOptions, loc => this.onLocation(loc))
     // Emit stats every second for the timer
     this.intervalId = setInterval(() => this.emitStats(), 1000)
   }
@@ -87,27 +99,14 @@ class TrackingService {
       this.pauseStart = null
     }
     if (this.statsCallback) {
-      this.subscription = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 2000, distanceInterval: 5 },
-        (location) => {
-          const point: TrackPoint = {
-            timestamp: location.timestamp,
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
-            altitudeM: location.coords.altitude,
-            speedKmh: location.coords.speed !== null ? location.coords.speed * 3.6 : null,
-            ...this.currentBle,
-          }
-          this.points.push(point)
-          this.emitStats()
-        },
-      )
+      this.subscription = await Location.watchPositionAsync(this.gpsOptions, loc => this.onLocation(loc))
     }
   }
 
   stop(): { stats: TrackStats; points: TrackPoint[] } {
     this.subscription?.remove()
     this.subscription = null
+    this.isTracking = false
     if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null }
     const stats = this.computeStats()
     return { stats, points: this.points }

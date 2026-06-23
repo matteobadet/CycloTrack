@@ -80,6 +80,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
         if (req.ElevationGainM.HasValue) plan.ElevationGainM = req.ElevationGainM.Value;
         if (req.ElevationLossM.HasValue) plan.ElevationLossM = req.ElevationLossM.Value;
         if (req.EstimatedDurationMin.HasValue) plan.EstimatedDurationMin = req.EstimatedDurationMin.Value;
+        if (req.PoisJson != null) plan.PoisJson = req.PoisJson;
         await db.SaveChangesAsync();
         return Ok(MapDetail(plan));
     }
@@ -154,6 +155,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
             AiAdvice = req.AiAdvice,
             RouteStepsJson = req.RouteStepsJson,
             ElevationJson = req.ElevationJson,
+            PoisJson = req.PoisJson,
         };
         db.PlannedRides.Add(plan);
         await db.SaveChangesAsync();
@@ -266,7 +268,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
     private static PlannedRideDetailDto MapDetail(PlannedRide p) =>
         new(p.Id, p.Title, p.PlannedAt, p.DistanceKm, p.ElevationGainM, p.ElevationLossM,
             p.EstimatedDurationMin, p.IsCompleted, p.CreatedAt, p.RoutePolyline, p.AiAdvice, p.GoogleMapsUrl,
-            p.RouteStepsJson, p.ElevationJson);
+            p.RouteStepsJson, p.ElevationJson, p.PoisJson);
 }
 
 public record ElevPoint(float DistKm, float AltM);
@@ -292,9 +294,10 @@ public record SavePlanRequest(
     string? GoogleMapsUrl = null,
     string? AiAdvice = null,
     string? RouteStepsJson = null,
-    string? ElevationJson = null
+    string? ElevationJson = null,
+    string? PoisJson = null
 );
 
-public record UpdatePlanRequest(string Title, DateTime? PlannedAt, string? RoutePolyline = null, float? DistanceKm = null, float? ElevationGainM = null, float? ElevationLossM = null, int? EstimatedDurationMin = null);
+public record UpdatePlanRequest(string Title, DateTime? PlannedAt, string? RoutePolyline = null, float? DistanceKm = null, float? ElevationGainM = null, float? ElevationLossM = null, int? EstimatedDurationMin = null, string? PoisJson = null);
 public record PlannedRideDto(Guid Id, string Title, DateTime? PlannedAt, float DistanceKm, float ElevationGainM, float ElevationLossM, int EstimatedDurationMin, bool IsCompleted, DateTime CreatedAt);
-public record PlannedRideDetailDto(Guid Id, string Title, DateTime? PlannedAt, float DistanceKm, float ElevationGainM, float ElevationLossM, int EstimatedDurationMin, bool IsCompleted, DateTime CreatedAt, string? RoutePolyline, string? AiAdvice, string? GoogleMapsUrl, string? RouteStepsJson, string? ElevationJson);
+public record PlannedRideDetailDto(Guid Id, string Title, DateTime? PlannedAt, float DistanceKm, float ElevationGainM, float ElevationLossM, int EstimatedDurationMin, bool IsCompleted, DateTime CreatedAt, string? RoutePolyline, string? AiAdvice, string? GoogleMapsUrl, string? RouteStepsJson, string? ElevationJson, string? PoisJson);

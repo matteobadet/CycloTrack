@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Image } from 'react-native'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { trackingService, TrackStats, TrackPoint } from '../services/trackingService'
 import { bleService, BleReadings } from '../services/bleService'
 import { saveRideLocally, syncPendingRides } from '../services/offlineStore'
 import { startSpotifyPolling, stopSpotifyPolling, SpotifyTrackInfo } from '../services/spotifyMobileService'
 import { NavigationService, NavCue } from '../services/navigationService'
+import ElevationMiniChart from '../components/ElevationMiniChart'
 
 function getStandaloneNutritionCue(elapsedSec: number): NavCue | null {
   const elapsedMin = elapsedSec / 60
@@ -21,6 +23,17 @@ function getStandaloneNutritionCue(elapsedSec: number): NavCue | null {
   }
   return null
 }
+
+function formatEta(remainingM: number, speedKmh: number): string {
+  if (speedKmh < 1) return ''
+  const remainingSec = (remainingM / 1000) / speedKmh * 3600
+  const arrival = new Date(Date.now() + remainingSec * 1000)
+  const h = arrival.getHours().toString().padStart(2, '0')
+  const min = arrival.getMinutes().toString().padStart(2, '0')
+  const distKm = (remainingM / 1000).toFixed(1)
+  return `${distKm} km — arrivée ~${h}:${min}`
+}
+
 import { api } from '../lib/api'
 import { useTheme, Theme } from '../theme'
 import LiveMap from '../components/LiveMap'
@@ -50,6 +63,9 @@ const statBoxStyles = (t: Theme) => StyleSheet.create({
   label: { fontSize: 11, color: t.textMuted, marginTop: 2 },
 })
 
+// Number of consecutive GPS updates off-route before triggering the alert
+const OFF_ROUTE_THRESHOLD = 3
+
 export default function TrackingScreen({ route, navigation }: any) {
   const { feelBefore, commentBefore, rideId: initialRideId, plannedRideId } = route.params ?? {}
   const t = useTheme()
@@ -61,11 +77,25 @@ export default function TrackingScreen({ route, navigation }: any) {
   const [nowPlaying, setNowPlaying] = useState<SpotifyTrackInfo | null>(null)
   const [navCues, setNavCues] = useState<NavCue[]>([])
   const [plannedRouteCoords, setPlannedRouteCoords] = useState<[number, number][] | undefined>()
+  const [offRoute, setOffRoute] = useState(false)
+  const [batterySaver, setBatterySaverState] = useState(false)
+  const [progressM, setProgressM] = useState(0)
   const navServiceRef = useRef<NavigationService | null>(null)
   const rideIdRef = useRef<string | null>(initialRideId ?? null)
   const serverRideIdRef = useRef<string | null>(null)
   const statsRef = useRef<TrackStats | null>(null)
   const bleRef = useRef<BleReadings>({ bpm: null, watts: null, cadenceRpm: null })
+  const offRouteCountRef = useRef(0)
+
+  // Screen keep-awake: activate while running
+  useEffect(() => {
+    if (status === 'running') {
+      activateKeepAwakeAsync()
+    } else {
+      deactivateKeepAwake()
+    }
+    return () => { deactivateKeepAwake() }
+  }, [status])
 
   // Load planned ride data (route + steps + elevation)
   useEffect(() => {
@@ -77,7 +107,6 @@ export default function TrackingScreen({ route, navigation }: any) {
         navServiceRef.current = svc
         setPlannedRouteCoords(svc.routeCoords)
       } else if (plan.routePolyline) {
-        // No steps — at least show the route
         const svc = new NavigationService(plan.routePolyline, '[]', plan.elevationJson ?? '[]')
         navServiceRef.current = svc
         setPlannedRouteCoords(svc.routeCoords)
@@ -102,28 +131,46 @@ export default function TrackingScreen({ route, navigation }: any) {
     await trackingService.start((newStats, newPoints) => {
       setStats(newStats)
       setPoints([...newPoints])
-      // Update navigation cues
+
       if (newPoints.length > 0) {
         const last = newPoints[newPoints.length - 1]
-        const cues = navServiceRef.current
-          ? navServiceRef.current.getCues(last.lat, last.lng, newStats.durationSec)
+        const navSvc = navServiceRef.current
+
+        // Navigation cues
+        const cues = navSvc
+          ? navSvc.getCues(last.lat, last.lng, newStats.durationSec)
           : []
         if (!cues.some(c => c.type === 'nutrition')) {
           const nc = getStandaloneNutritionCue(newStats.durationSec)
           if (nc) cues.push(nc)
         }
         setNavCues(cues)
+
+        // Progress along route
+        if (navSvc) {
+          const prog = navSvc.distanceAlongRoute(last.lat, last.lng)
+          setProgressM(prog)
+
+          // Off-route detection
+          const distToRoute = navSvc.minDistToRouteM(last.lat, last.lng)
+          if (distToRoute > 150) {
+            offRouteCountRef.current++
+            if (offRouteCountRef.current >= OFF_ROUTE_THRESHOLD) setOffRoute(true)
+          } else {
+            offRouteCountRef.current = 0
+            setOffRoute(false)
+          }
+        }
       }
     })
     setStatus('running')
 
-    // Create ride on server immediately to get a real ID for Spotify polling
     try {
       const res = await api.post('/rides/start', { startedAt: new Date().toISOString() })
       serverRideIdRef.current = res.data.id
       startPollingForRide(res.data.id)
     } catch {
-      // No connectivity — Spotify polling skipped, ride will sync offline at end
+      // offline — Spotify skipped, ride syncs at end
     }
   }
 
@@ -150,7 +197,6 @@ export default function TrackingScreen({ route, navigation }: any) {
 
           let finalRideId: string
           if (serverRideIdRef.current) {
-            // Complete the ride created at start (Spotify was polling against it)
             finalRideId = serverRideIdRef.current
             await api.patch(`/rides/${finalRideId}/complete`, {
               endedAt: now,
@@ -188,7 +234,12 @@ export default function TrackingScreen({ route, navigation }: any) {
     ])
   }
 
-  // Called when a synced ride ID is available — start Spotify polling
+  async function toggleBatterySaver() {
+    const next = !batterySaver
+    setBatterySaverState(next)
+    await trackingService.setBatterySaver(next)
+  }
+
   function startPollingForRide(rideId: string) {
     rideIdRef.current = rideId
     startSpotifyPolling(
@@ -204,26 +255,59 @@ export default function TrackingScreen({ route, navigation }: any) {
   }
 
   const lastPoint = points[points.length - 1]
+  const navSvc = navServiceRef.current
+  const totalDistM = navSvc?.totalDistM ?? 0
 
-  // Priority cue to display (turn > elevation > nutrition)
-  const primaryCue = navCues.find(c => c.type === 'turn' || c.type === 'arrival')
-    ?? navCues.find(c => c.type === 'elevation')
-    ?? navCues.find(c => c.type === 'nutrition')
+  // ETA
+  const etaText = navSvc && stats && stats.avgSpeedKmh > 1 && totalDistM > 0
+    ? formatEta(Math.max(0, totalDistM - progressM), stats.avgSpeedKmh)
+    : null
+
+  // Priority cue (off-route overrides everything)
+  const primaryCue = offRoute
+    ? { type: 'turn' as const, emoji: '↩️', message: 'Hors itinéraire — revenez sur le tracé' }
+    : (navCues.find(c => c.type === 'turn' || c.type === 'arrival')
+      ?? navCues.find(c => c.type === 'elevation')
+      ?? navCues.find(c => c.type === 'nutrition'))
+
+  const showElevChart = navSvc && navSvc.elevProfile.length > 0 && totalDistM > 0
 
   return (
     <View style={s.container}>
       <View style={s.mapWrapper}>
         <LiveMap points={points} plannedCoords={plannedRouteCoords} style={StyleSheet.absoluteFillObject} />
         {primaryCue && (
-          <View style={[s.navBanner, primaryCue.type === 'turn' || primaryCue.type === 'arrival' ? s.navBannerTurn : primaryCue.type === 'elevation' ? s.navBannerElev : s.navBannerNutrition]}>
+          <View style={[
+            s.navBanner,
+            offRoute ? s.navBannerOffRoute
+              : primaryCue.type === 'turn' || primaryCue.type === 'arrival' ? s.navBannerTurn
+              : primaryCue.type === 'elevation' ? s.navBannerElev
+              : s.navBannerNutrition,
+          ]}>
             <Text style={s.navBannerEmoji}>{primaryCue.emoji}</Text>
             <Text style={s.navBannerText} numberOfLines={2}>{primaryCue.message}</Text>
           </View>
         )}
       </View>
 
+      {/* Elevation profile */}
+      {showElevChart && (
+        <ElevationMiniChart
+          elevProfile={navSvc!.elevProfile}
+          progressM={progressM}
+          totalDistM={totalDistM}
+        />
+      )}
+
       <ScrollView style={s.panel} contentContainerStyle={s.panelContent}>
         <Text style={s.timer}>{stats ? formatDuration(stats.durationSec) : '00:00:00'}</Text>
+
+        {/* ETA */}
+        {etaText && (
+          <View style={s.etaRow}>
+            <Text style={s.etaText}>🏁 {etaText}</Text>
+          </View>
+        )}
 
         <View style={s.statsGrid}>
           <StatBox label="Distance" value={stats ? stats.distanceKm.toFixed(2) : '0.00'} unit=" km" t={t} />
@@ -286,6 +370,18 @@ export default function TrackingScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </>)}
         </View>
+
+        {/* Battery saver toggle (only visible while running) */}
+        {status !== 'idle' && (
+          <TouchableOpacity
+            style={[s.saverBtn, batterySaver && s.saverBtnActive]}
+            onPress={toggleBatterySaver}
+          >
+            <Text style={[s.saverBtnText, batterySaver && s.saverBtnTextActive]}>
+              🔋 Mode économie batterie {batterySaver ? 'ON (GPS 1/5s)' : 'OFF (GPS 1/2s)'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   )
@@ -299,11 +395,14 @@ const styles = (t: Theme) => StyleSheet.create({
   navBannerTurn: { backgroundColor: 'rgba(37,99,235,0.92)' },
   navBannerElev: { backgroundColor: 'rgba(234,88,12,0.90)' },
   navBannerNutrition: { backgroundColor: 'rgba(22,163,74,0.90)' },
+  navBannerOffRoute: { backgroundColor: 'rgba(220,38,38,0.95)' },
   navBannerEmoji: { fontSize: 22 },
   navBannerText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
-  panel: { maxHeight: 380 },
+  panel: { maxHeight: 400 },
   panelContent: { padding: 16 },
-  timer: { fontSize: 48, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: t.text, marginBottom: 16 },
+  timer: { fontSize: 48, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: t.text, marginBottom: 8 },
+  etaRow: { alignItems: 'center', marginBottom: 12 },
+  etaText: { fontSize: 13, color: t.textSub, fontWeight: '600' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   bleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   bleChip: { flex: 1, backgroundColor: t.card, borderRadius: 20, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: t.blue },
@@ -314,7 +413,11 @@ const styles = (t: Theme) => StyleSheet.create({
   spotifyTrack: { fontSize: 13, fontWeight: '700', color: t.text },
   spotifyArtist: { fontSize: 12, color: t.textSub },
   spotifyTempo: { fontSize: 11, color: '#1db954', marginTop: 2 },
-  controls: { flexDirection: 'row', gap: 12 },
+  controls: { flexDirection: 'row', gap: 12, marginBottom: 10 },
   ctrlBtn: { flex: 1, borderRadius: 14, padding: 16, alignItems: 'center' },
   ctrlBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  saverBtn: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center', borderWidth: 1, borderColor: t.border, backgroundColor: t.card },
+  saverBtnActive: { borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.12)' },
+  saverBtnText: { fontSize: 12, color: t.textMuted },
+  saverBtnTextActive: { color: '#16a34a', fontWeight: '600' },
 })

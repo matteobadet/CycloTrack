@@ -24,6 +24,9 @@ public class PlannedRide
     // JSON: [{distKm, altM}]
     public string? ElevationJson { get; set; }
 
+    // JSON: [{lat, lng, type, label}]
+    public string? PoisJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public bool IsCompleted { get; set; } = false;
 }
