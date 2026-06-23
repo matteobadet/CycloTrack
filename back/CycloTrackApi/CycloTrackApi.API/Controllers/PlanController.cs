@@ -81,6 +81,7 @@ public class PlanController(IUserRepository userRepo, IHttpClientFactory httpCli
         if (req.ElevationLossM.HasValue) plan.ElevationLossM = req.ElevationLossM.Value;
         if (req.EstimatedDurationMin.HasValue) plan.EstimatedDurationMin = req.EstimatedDurationMin.Value;
         if (req.PoisJson != null) plan.PoisJson = req.PoisJson;
+        if (req.AiAdvice != null) plan.AiAdvice = req.AiAdvice;
         await db.SaveChangesAsync();
         return Ok(MapDetail(plan));
     }
@@ -498,6 +499,6 @@ public record SavePlanRequest(
     string? PoisJson = null
 );
 
-public record UpdatePlanRequest(string Title, DateTime? PlannedAt, string? RoutePolyline = null, float? DistanceKm = null, float? ElevationGainM = null, float? ElevationLossM = null, int? EstimatedDurationMin = null, string? PoisJson = null);
+public record UpdatePlanRequest(string Title, DateTime? PlannedAt, string? RoutePolyline = null, float? DistanceKm = null, float? ElevationGainM = null, float? ElevationLossM = null, int? EstimatedDurationMin = null, string? PoisJson = null, string? AiAdvice = null);
 public record PlannedRideDto(Guid Id, string Title, DateTime? PlannedAt, float DistanceKm, float ElevationGainM, float ElevationLossM, int EstimatedDurationMin, bool IsCompleted, DateTime CreatedAt);
 public record PlannedRideDetailDto(Guid Id, string Title, DateTime? PlannedAt, float DistanceKm, float ElevationGainM, float ElevationLossM, int EstimatedDurationMin, bool IsCompleted, DateTime CreatedAt, string? RoutePolyline, string? AiAdvice, string? GoogleMapsUrl, string? RouteStepsJson, string? ElevationJson, string? PoisJson);

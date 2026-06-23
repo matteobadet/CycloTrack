@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import { api } from '@/lib/axios'
 import { computeRoute, decodePolyline, RouteData, elevationsFromProfile } from '@/lib/routing'
 import GradientPolyline, { GradientLegend } from '@/components/GradientPolyline'
-import ColStats, { ClimbSegment } from '@/components/ColStats'
+import ColStats, { ClimbSegment, detectCols } from '@/components/ColStats'
 import { Loader2, ArrowLeft, CheckCircle2, Calendar, Brain, Pencil, Copy, X, Check, MapPin, Trash2, Edit2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -64,6 +64,8 @@ export default function PlanDetailPage() {
 
   const [duplicating, setDuplicating] = useState(false)
   const [hoveredClimb, setHoveredClimb] = useState<ClimbSegment | null>(null)
+  const [generatingAi, setGeneratingAi] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   useEffect(() => {
     api.get(`/plan/${id}`).then(r => setPlan(r.data)).finally(() => setLoading(false))
@@ -107,6 +109,57 @@ export default function PlanDetailPage() {
   async function markComplete() {
     await api.patch(`/plan/${id}/complete`)
     setPlan(p => p ? { ...p, isCompleted: true } : p)
+  }
+
+  async function handleGenerateAi() {
+    if (!plan) return
+    setGeneratingAi(true)
+    setAiError(null)
+    try {
+      const ep: { dist: number; alt: number }[] = plan.elevationJson ? JSON.parse(plan.elevationJson) : []
+      const cols = ep.length > 1 ? detectCols(ep).map(c => ({
+        startKm: c.startKm, endKm: c.endKm, lengthKm: c.lengthKm,
+        gainM: c.gainM, avgGradientPct: c.avgGradientPct, summitAlt: c.summitAlt,
+      })) : []
+
+      const rawSteps = plan.routeStepsJson ? JSON.parse(plan.routeStepsJson) : []
+      const steps = rawSteps.map((s: { instruction: string; emoji: string; cumulativeM: number; distanceM: number }) => {
+        const cumKm = s.cumulativeM / 1000
+        const after = ep.find(p => p.dist >= cumKm)
+        const before = [...ep].reverse().find(p => p.dist <= cumKm)
+        const altM = after && before
+          ? (after.dist === before.dist ? after.alt : before.alt + (after.alt - before.alt) * ((cumKm - before.dist) / (after.dist - before.dist)))
+          : (after?.alt ?? before?.alt ?? null)
+        return { instruction: s.instruction, cumulativeKm: cumKm, distanceKm: s.distanceM / 1000, altM }
+      })
+
+      const pois = plan.poisJson ? JSON.parse(plan.poisJson).map((p: { type: string; label?: string }) => ({ type: p.type, label: p.label })) : []
+
+      const startCoord = coordsForElevation[0]
+
+      const res = await api.post('/plan/ai', {
+        distanceKm: plan.distanceKm,
+        elevationGainM: plan.elevationGainM,
+        elevationLossM: plan.elevationLossM,
+        estimatedDurationMin: plan.estimatedDurationMin,
+        difficulty: 'medium',
+        plannedAt: plan.plannedAt ?? undefined,
+        keyPoints: ep.filter((_, i) => i % Math.max(1, Math.floor(ep.length / 15)) === 0).map(p => ({ distKm: p.dist, altM: p.alt })),
+        cols: cols.length > 0 ? cols : undefined,
+        steps: steps.length > 0 ? steps : undefined,
+        pois: pois.length > 0 ? pois : undefined,
+        startLat: startCoord?.[0],
+        startLng: startCoord?.[1],
+      })
+
+      const newAdvice = res.data.advice
+      await api.patch(`/plan/${plan.id}`, { title: plan.title, plannedAt: plan.plannedAt, aiAdvice: newAdvice })
+      setPlan(p => p ? { ...p, aiAdvice: newAdvice } : p)
+    } catch {
+      setAiError('Impossible de générer les conseils IA.')
+    } finally {
+      setGeneratingAi(false)
+    }
   }
 
   function startEdit() {
@@ -377,7 +430,34 @@ export default function PlanDetailPage() {
       )}
 
       {/* AI advice */}
-      {plan.aiAdvice && (
+      {!plan.isCompleted && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <Brain size={16} className="text-purple-500" /> Conseils du coach IA
+            </h2>
+            <button
+              onClick={handleGenerateAi}
+              disabled={generatingAi}
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+            >
+              {generatingAi ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+              {generatingAi ? 'Analyse en cours...' : plan.aiAdvice ? 'Régénérer' : 'Obtenir les conseils'}
+            </button>
+          </div>
+          {aiError && <p className="text-sm text-red-500 mb-3">{aiError}</p>}
+          {plan.aiAdvice ? (
+            <div className="prose prose-sm max-w-none text-gray-700 dark:text-gray-300 dark:prose-headings:text-white dark:prose-strong:text-white">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{plan.aiAdvice}</ReactMarkdown>
+            </div>
+          ) : !generatingAi && (
+            <p className="text-sm text-gray-400 dark:text-slate-500">
+              Cliquez sur "Obtenir les conseils" pour recevoir un plan personnalisé basé sur votre profil, la météo et le profil altimétrique.
+            </p>
+          )}
+        </div>
+      )}
+      {plan.isCompleted && plan.aiAdvice && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-5">
           <h2 className="font-semibold mb-4 text-gray-900 dark:text-white flex items-center gap-2">
             <Brain size={16} className="text-purple-500" /> Conseils du coach IA
