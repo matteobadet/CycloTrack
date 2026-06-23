@@ -94,6 +94,8 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
             await rideRepo.AddPointsAsync(points);
         }
 
+        await CheckGoalAchievements(UserId, ride.Id);
+
         return CreatedAtAction(nameof(GetRide), new { id = ride.Id }, ToDto(ride));
     }
 
@@ -147,6 +149,7 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
         }
 
         await db.SaveChangesAsync();
+        await CheckGoalAchievements(UserId, ride.Id);
         return Ok(ToDto(ride));
     }
 
@@ -439,4 +442,49 @@ public class RidesController(IRideRepository rideRepo, IUserRepository userRepo,
         t.TrackName, t.ArtistName, t.AlbumArtUrl,
         t.Tempo, t.Energy, t.Valence,
         t.PolledAt, t.SpeedKmh, t.Watts, t.Bpm);
+
+    private async Task CheckGoalAchievements(Guid userId, Guid rideId)
+    {
+        var now = DateTime.UtcNow;
+        var goals = await db.Goals
+            .Where(g => g.UserId == userId && !g.IsAchieved && g.StartDate <= now && g.EndDate >= now)
+            .ToListAsync();
+
+        foreach (var goal in goals)
+        {
+            var rides = db.Rides.Where(r => r.UserId == userId
+                && r.StartedAt >= goal.StartDate && r.StartedAt <= goal.EndDate);
+
+            float current = goal.Type switch
+            {
+                GoalType.Distance  => await rides.SumAsync(r => (float?)r.DistanceKm) ?? 0f,
+                GoalType.Elevation => await rides.SumAsync(r => (float?)r.ElevationGainM) ?? 0f,
+                GoalType.RideCount => await rides.CountAsync(),
+                GoalType.Performance => await rides.AnyAsync() ? await rides.MaxAsync(r => (float?)r.AvgWatts) ?? 0f : 0f,
+                _ => 0f,
+            };
+
+            if (current >= goal.TargetValue)
+            {
+                goal.IsAchieved = true;
+                var label = goal.Type switch
+                {
+                    GoalType.Distance  => $"{goal.TargetValue:0} km",
+                    GoalType.Elevation => $"{goal.TargetValue:0} m D+",
+                    GoalType.RideCount => $"{goal.TargetValue:0} sorties",
+                    GoalType.Performance => $"{goal.TargetValue:0} W",
+                    _ => goal.TargetValue.ToString(),
+                };
+                db.Notifications.Add(new Notification
+                {
+                    UserId = userId,
+                    Type = NotificationType.GoalAchieved,
+                    Message = $"Objectif atteint : {label} ! 🎉",
+                    RideId = rideId,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
 }

@@ -114,6 +114,21 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
             db.Reactions.Remove(existing);
         }
         db.Reactions.Add(new Reaction { RideId = rideId, UserId = UserId, Emoji = req.Emoji });
+
+        // Notify ride owner (not self)
+        var ride = await db.Rides.Include(r => r.User).FirstOrDefaultAsync(r => r.Id == rideId);
+        if (ride != null && ride.UserId != UserId)
+        {
+            var actor = await db.Users.FindAsync(UserId);
+            db.Notifications.Add(new Notification
+            {
+                UserId = ride.UserId,
+                Type = NotificationType.Reaction,
+                Message = $"{actor?.Pseudo} a réagi {req.Emoji} à votre sortie.",
+                RideId = rideId,
+            });
+        }
+
         await db.SaveChangesAsync();
         return NoContent();
     }
@@ -137,6 +152,21 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
     {
         if (string.IsNullOrWhiteSpace(req.Text)) return BadRequest();
         db.Comments.Add(new Comment { RideId = rideId, UserId = UserId, Text = req.Text.Trim() });
+
+        // Notify ride owner (not self)
+        var ride = await db.Rides.FirstOrDefaultAsync(r => r.Id == rideId);
+        if (ride != null && ride.UserId != UserId)
+        {
+            var actor = await db.Users.FindAsync(UserId);
+            db.Notifications.Add(new Notification
+            {
+                UserId = ride.UserId,
+                Type = NotificationType.Comment,
+                Message = $"{actor?.Pseudo} a commenté votre sortie.",
+                RideId = rideId,
+            });
+        }
+
         await db.SaveChangesAsync();
 
         var comments = await db.Comments
@@ -168,6 +198,16 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
         if (exists) return Conflict();
 
         db.Follows.Add(new Follow { FollowerId = UserId, FollowedId = targetUserId });
+
+        // Notify the followed user
+        var actor = await db.Users.FindAsync(UserId);
+        db.Notifications.Add(new Notification
+        {
+            UserId = targetUserId,
+            Type = NotificationType.Follow,
+            Message = $"{actor?.Pseudo} a commencé à vous suivre.",
+        });
+
         await db.SaveChangesAsync();
         return NoContent();
     }

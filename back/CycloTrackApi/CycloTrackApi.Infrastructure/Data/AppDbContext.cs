@@ -17,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Reaction> Reactions => Set<Reaction>();
     public DbSet<Challenge> Challenges => Set<Challenge>();
     public DbSet<ChallengeParticipant> ChallengeParticipants => Set<ChallengeParticipant>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
