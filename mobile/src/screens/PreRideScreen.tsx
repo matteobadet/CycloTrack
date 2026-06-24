@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
-import { bleService } from '../services/bleService'
+import { bleService, ConnectionStatus } from '../services/bleService'
 import { useTheme, Theme } from '../theme'
 
 const FEELS = [
@@ -17,15 +17,14 @@ export default function PreRideScreen({ navigation, route: navRoute }: any) {
   const s = styles(t)
   const [feel, setFeel] = useState<number | null>(null)
   const [comment, setComment] = useState('')
-  const [hrConnected, setHrConnected]       = useState(bleService.isHrConnected)
-  const [powerConnected, setPowerConnected] = useState(bleService.isPowerConnected)
+  const [conn, setConn] = useState<ConnectionStatus>(bleService.connectionStatus)
   const plannedRideId: string | undefined = navRoute?.params?.plannedRideId
   const plannedTitle: string | undefined  = navRoute?.params?.plannedTitle
 
-  // Refresh BLE status each time the user comes back from SensorScreen
   useFocusEffect(useCallback(() => {
-    setHrConnected(bleService.isHrConnected)
-    setPowerConnected(bleService.isPowerConnected)
+    setConn(bleService.connectionStatus)
+    bleService.addStatusListener(setConn)
+    return () => bleService.removeStatusListener(setConn)
   }, []))
 
   function startRide() {
@@ -66,20 +65,33 @@ export default function PreRideScreen({ navigation, route: navRoute }: any) {
         numberOfLines={3}
       />
 
-      <Text style={s.sectionLabel}>Capteurs BLE</Text>
-      <View style={s.bleRow}>
-        <View style={s.sensor}>
-          <Text style={s.sensorIcon}>{powerConnected ? '🟢' : '⚫'}</Text>
-          <Text style={s.sensorLabel}>CYCPLUS M1{'\n'}(Watts + Cadence)</Text>
-        </View>
-        <View style={s.sensor}>
-          <Text style={s.sensorIcon}>{hrConnected ? '🟢' : '⚫'}</Text>
-          <Text style={s.sensorLabel}>CYCPLUS H2PRO{'\n'}(FC)</Text>
-        </View>
-      </View>
+      <Text style={s.sectionLabel}>Capteurs</Text>
+      {(() => {
+        const connected = [
+          conn.hr === 'connected'      && conn.hrDeviceName,
+          conn.power === 'connected'   && conn.powerDeviceName,
+          conn.cadence === 'connected' && conn.cadenceDeviceName,
+          conn.speed === 'connected'   && conn.speedDeviceName,
+        ].filter(Boolean) as string[]
+        // dedupe device names
+        const unique = [...new Set(connected)]
+        return unique.length > 0 ? (
+          <View style={s.connectedList}>
+            {unique.map(name => (
+              <View key={name} style={s.connectedChip}>
+                <Text style={s.connectedDot}>🟢</Text>
+                <Text style={s.connectedName}>{name}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={s.noSensorText}>Aucun capteur connecté</Text>
+        )
+      })()}
       <TouchableOpacity style={s.bleBtn} onPress={() => navigation.navigate('Sensors')}>
         <Text style={s.bleBtnText}>
-          {hrConnected || powerConnected ? '⚙️ Gérer les capteurs' : '🔍 Connecter les capteurs'}
+          {conn.hr === 'connected' || conn.power === 'connected' || conn.cadence === 'connected'
+            ? '⚙️ Gérer les capteurs' : '🔍 Connecter les capteurs'}
         </Text>
       </TouchableOpacity>
 
@@ -101,10 +113,11 @@ const styles = (t: Theme) => StyleSheet.create({
   feelLabel: { fontSize: 10, color: t.textMuted, marginTop: 4 },
   feelLabelActive: { color: t.blue, fontWeight: '600' },
   textarea: { borderWidth: 1, borderColor: t.border, borderRadius: 12, padding: 12, fontSize: 15, minHeight: 80, textAlignVertical: 'top', backgroundColor: t.card, color: t.text },
-  bleRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  sensor: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, backgroundColor: t.card, borderWidth: 1, borderColor: t.border },
-  sensorIcon: { fontSize: 20 },
-  sensorLabel: { fontSize: 12, color: t.textSub, flexShrink: 1 },
+  connectedList: { gap: 8, marginBottom: 12 },
+  connectedChip: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, backgroundColor: t.card, borderWidth: 1, borderColor: '#22c55e' },
+  connectedDot:  { fontSize: 14 },
+  connectedName: { fontSize: 13, color: t.text, fontWeight: '500' },
+  noSensorText:  { fontSize: 13, color: t.textMuted, marginBottom: 12 },
   bleBtn: { backgroundColor: t.inputBg, borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 8 },
   bleBtnText: { fontWeight: '600', color: t.text },
   bleStatus: { textAlign: 'center', color: t.textSub, fontSize: 13, marginBottom: 8 },

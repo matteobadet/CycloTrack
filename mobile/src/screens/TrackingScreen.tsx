@@ -4,7 +4,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { trackingService, TrackStats, TrackPoint } from '../services/trackingService'
 import { bleService, BleReadings } from '../services/bleService'
 import { saveRideLocally, syncPendingRides } from '../services/offlineStore'
-import { startSpotifyPolling, stopSpotifyPolling, SpotifyTrackInfo } from '../services/spotifyMobileService'
+import { startSpotifyPolling, stopSpotifyPolling, SpotifyTrackInfo, openSpotifyAuth, getSpotifyStatus, spotifyPlay, spotifyPause, spotifyNext, spotifyPrevious } from '../services/spotifyMobileService'
 import { NavigationService, NavCue } from '../services/navigationService'
 import ElevationMiniChart from '../components/ElevationMiniChart'
 
@@ -113,8 +113,12 @@ export default function TrackingScreen({ route, navigation }: any) {
   const [status, setStatus] = useState<Status>('idle')
   const [stats, setStats] = useState<TrackStats | null>(null)
   const [points, setPoints] = useState<TrackPoint[]>([])
-  const [ble, setBle] = useState<BleReadings>({ bpm: null, watts: null, cadenceRpm: null })
+  const [ble, setBle] = useState<BleReadings>({ bpm: null, watts: null, cadenceRpm: null, speedKmh: null })
+  const [conn, setConn] = useState(() => bleService.connectionStatus)
+  const [tab, setTab] = useState<'map' | 'stats' | 'spotify'>('map')
   const [nowPlaying, setNowPlaying] = useState<SpotifyTrackInfo | null>(null)
+  const [spotifyLinked, setSpotifyLinked] = useState(false)
+  const [spotifyLoading, setSpotifyLoading] = useState(false)
   const [navCues, setNavCues] = useState<NavCue[]>([])
   const [plannedRouteCoords, setPlannedRouteCoords] = useState<[number, number][] | undefined>()
   const [aiPhases, setAiPhases] = useState<AiPhase[]>([])
@@ -127,6 +131,11 @@ export default function TrackingScreen({ route, navigation }: any) {
   const statsRef = useRef<TrackStats | null>(null)
   const bleRef = useRef<BleReadings>({ bpm: null, watts: null, cadenceRpm: null })
   const offRouteCountRef = useRef(0)
+
+  // Check Spotify link status on mount
+  useEffect(() => {
+    getSpotifyStatus().then(setSpotifyLinked)
+  }, [])
 
   // Screen keep-awake: activate while running
   useEffect(() => {
@@ -159,12 +168,19 @@ export default function TrackingScreen({ route, navigation }: any) {
   }, [plannedRideId])
 
   useEffect(() => {
-    bleService.startScan((readings) => {
+    const onBle = (readings: Partial<import('../services/bleService').BleReadings>) => {
       setBle(prev => ({ ...prev, ...readings }))
       bleRef.current = { ...bleRef.current, ...readings }
       trackingService.updateBle(readings)
-    })
-    return () => { bleService.stopScan() }
+    }
+    bleService.addReadingsListener(onBle)
+    bleService.addStatusListener(setConn)
+    bleService.startScan()
+    return () => {
+      bleService.removeReadingsListener(onBle)
+      bleService.removeStatusListener(setConn)
+      bleService.stopScan()
+    }
   }, [])
 
   useEffect(() => { statsRef.current = stats }, [stats])
@@ -284,6 +300,18 @@ export default function TrackingScreen({ route, navigation }: any) {
     await trackingService.setBatterySaver(next)
   }
 
+  async function handleSpotifyConnect() {
+    setSpotifyLoading(true)
+    const ok = await openSpotifyAuth()
+    setSpotifyLoading(false)
+    setSpotifyLinked(ok)
+    if (ok) {
+      // Start polling immediately even before a ride starts
+      const pollId = serverRideIdRef.current ?? rideIdRef.current ?? 'local'
+      startPollingForRide(pollId)
+    }
+  }
+
   function startPollingForRide(rideId: string) {
     rideIdRef.current = rideId
     startSpotifyPolling(
@@ -316,10 +344,49 @@ export default function TrackingScreen({ route, navigation }: any) {
 
   const showElevChart = navSvc && navSvc.elevProfile.length > 0 && totalDistM > 0
 
+  // BLE chips — only slots actually connected
+  const bleChips = [
+    conn.hr === 'connected'      && { key: 'hr',  icon: '❤️', value: ble.bpm      ? `${ble.bpm} bpm`        : '…' },
+    conn.power === 'connected'   && { key: 'pwr', icon: '⚡', value: ble.watts     ? `${ble.watts} W`        : '…' },
+    conn.cadence === 'connected' && { key: 'cad', icon: '🔄', value: ble.cadenceRpm ? `${ble.cadenceRpm} rpm` : '…' },
+    conn.speed === 'connected'   && { key: 'spd', icon: '💨', value: ble.speedKmh  ? `${ble.speedKmh} km/h`  : '…' },
+  ].filter(Boolean) as { key: string; icon: string; value: string }[]
+
+  // Controls bar (always visible)
+  const Controls = () => (
+    <View style={s.controls}>
+      {status === 'idle' && (
+        <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.green }]} onPress={handleStart}>
+          <Text style={s.ctrlBtnText}>▶ Démarrer</Text>
+        </TouchableOpacity>
+      )}
+      {status === 'running' && (<>
+        <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.amber }]} onPress={handlePause}>
+          <Text style={s.ctrlBtnText}>⏸ Pause</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.red }]} onPress={handleStop}>
+          <Text style={s.ctrlBtnText}>⏹ Terminer</Text>
+        </TouchableOpacity>
+      </>)}
+      {status === 'paused' && (<>
+        <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.green }]} onPress={handleResume}>
+          <Text style={s.ctrlBtnText}>▶ Reprendre</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.red }]} onPress={handleStop}>
+          <Text style={s.ctrlBtnText}>⏹ Terminer</Text>
+        </TouchableOpacity>
+      </>)}
+    </View>
+  )
+
   return (
     <View style={s.container}>
-      <View style={s.mapWrapper}>
+
+      {/* ── MAP (always visible, shrinks on stats/spotify tabs) ── */}
+      <View style={[s.mapWrapper, tab !== 'map' && s.mapWrapperSmall]}>
         <LiveMap points={points} plannedCoords={plannedRouteCoords} style={StyleSheet.absoluteFillObject} />
+
+        {/* Nav banner */}
         {primaryCue && (
           <View style={[
             s.navBanner,
@@ -332,154 +399,229 @@ export default function TrackingScreen({ route, navigation }: any) {
             <Text style={s.navBannerText} numberOfLines={2}>{primaryCue.message}</Text>
           </View>
         )}
+
+        {/* Map tab: key stats overlay (timer + speed + distance) */}
+        {tab === 'map' && (
+          <View style={s.mapOverlay}>
+            <Text style={s.mapTimer}>{stats ? formatDuration(stats.durationSec) : '00:00:00'}</Text>
+            <View style={s.mapStatRow}>
+              <View style={s.mapStat}>
+                <Text style={s.mapStatVal}>{stats ? stats.distanceKm.toFixed(2) : '0.00'}</Text>
+                <Text style={s.mapStatLabel}>km</Text>
+              </View>
+              <View style={s.mapStatDivider} />
+              <View style={s.mapStat}>
+                <Text style={s.mapStatVal}>{stats ? stats.avgSpeedKmh.toFixed(1) : '0.0'}</Text>
+                <Text style={s.mapStatLabel}>km/h</Text>
+              </View>
+              <View style={s.mapStatDivider} />
+              <View style={s.mapStat}>
+                <Text style={s.mapStatVal}>{stats ? stats.elevationGainM.toFixed(0) : '0'}</Text>
+                <Text style={s.mapStatLabel}>m D+</Text>
+              </View>
+              {bleChips.length > 0 && <View style={s.mapStatDivider} />}
+              {bleChips.map(c => (
+                <View key={c.key} style={s.mapStat}>
+                  <Text style={s.mapStatVal}>{c.value}</Text>
+                  <Text style={s.mapStatLabel}>{c.icon}</Text>
+                </View>
+              ))}
+            </View>
+            {etaText && <Text style={s.mapEta}>🏁 {etaText}</Text>}
+          </View>
+        )}
       </View>
 
-      {/* Elevation profile */}
+      {/* Elevation chart */}
       {showElevChart && (
-        <ElevationMiniChart
-          elevProfile={navSvc!.elevProfile}
-          progressM={progressM}
-          totalDistM={totalDistM}
-        />
+        <ElevationMiniChart elevProfile={navSvc!.elevProfile} progressM={progressM} totalDistM={totalDistM} />
       )}
 
-      <ScrollView style={s.panel} contentContainerStyle={s.panelContent}>
-        <Text style={s.timer}>{stats ? formatDuration(stats.durationSec) : '00:00:00'}</Text>
+      {/* ── TAB BAR ── */}
+      <View style={s.tabBar}>
+        {([['map', '🗺️', 'Carte'], ['stats', '📊', 'Stats'], ['spotify', '🎵', 'Musique']] as const).map(([key, icon, label]) => (
+          <TouchableOpacity key={key} style={[s.tab, tab === key && s.tabActive]} onPress={() => setTab(key)}>
+            <Text style={s.tabIcon}>{icon}</Text>
+            <Text style={[s.tabLabel, tab === key && s.tabLabelActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-        {/* ETA */}
-        {etaText && (
-          <View style={s.etaRow}>
-            <Text style={s.etaText}>🏁 {etaText}</Text>
-          </View>
-        )}
-
-        {/* Current phase objective from AI plan */}
-        {aiPhases.length > 0 && status === 'running' && (() => {
-          const progressKm = progressM / 1000
-          const phase = getCurrentPhase(aiPhases, progressKm)
-          if (!phase) return null
-          return (
-            <View style={s.phaseCard}>
-              <Text style={s.phaseLabel}>🎯 {phase.label}</Text>
-              {phase.target ? <Text style={s.phaseTarget}>{phase.target}</Text> : null}
-              <Text style={s.phaseKm}>km {phase.fromKm.toFixed(1)} → {phase.toKm.toFixed(1)}</Text>
-            </View>
-          )
-        })()}
-
-        <View style={s.statsGrid}>
-          <StatBox label="Distance" value={stats ? stats.distanceKm.toFixed(2) : '0.00'} unit=" km" t={t} />
-          <StatBox label="Vitesse" value={stats ? stats.avgSpeedKmh.toFixed(1) : '0.0'} unit=" km/h" t={t} />
-          <StatBox label="Dénivelé +" value={stats ? stats.elevationGainM.toFixed(0) : '0'} unit=" m" t={t} />
-          <StatBox label="Calories" value={stats ? String(stats.caloriesBurned) : '0'} unit=" kcal" t={t} />
-        </View>
-
-        <View style={s.bleRow}>
-          <View style={[s.bleChip, !ble.bpm && s.bleChipOff]}>
-            <Text style={s.bleChipText}>❤️ {ble.bpm ? `${ble.bpm} bpm` : '-- bpm'}</Text>
-          </View>
-          <View style={[s.bleChip, !ble.watts && s.bleChipOff]}>
-            <Text style={s.bleChipText}>⚡ {ble.watts ? `${ble.watts} W` : '-- W'}</Text>
-          </View>
-          <View style={[s.bleChip, !ble.cadenceRpm && s.bleChipOff]}>
-            <Text style={s.bleChipText}>🔄 {ble.cadenceRpm ? `${ble.cadenceRpm} rpm` : '-- rpm'}</Text>
-          </View>
-        </View>
-
-        {nowPlaying && (
-          <View style={s.spotifyCard}>
-            {nowPlaying.albumArtUrl ? (
-              <Image source={{ uri: nowPlaying.albumArtUrl }} style={s.albumArt} />
-            ) : (
-              <View style={[s.albumArt, { backgroundColor: t.inputBg, alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 20 }}>🎵</Text>
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={s.spotifyTrack} numberOfLines={1}>{nowPlaying.trackName}</Text>
-              <Text style={s.spotifyArtist} numberOfLines={1}>{nowPlaying.artistName}</Text>
-              {nowPlaying.tempo && (
-                <Text style={s.spotifyTempo}>{Math.round(nowPlaying.tempo)} BPM</Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        <View style={s.controls}>
-          {status === 'idle' && (
-            <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.green }]} onPress={handleStart}>
-              <Text style={s.ctrlBtnText}>▶ Démarrer</Text>
+      {/* ── PANELS ── */}
+      {tab === 'map' && (
+        <View style={s.panelControls}>
+          <Controls />
+          {status !== 'idle' && (
+            <TouchableOpacity style={[s.saverBtn, batterySaver && s.saverBtnActive]} onPress={toggleBatterySaver}>
+              <Text style={[s.saverBtnText, batterySaver && s.saverBtnTextActive]}>
+                🔋 Éco batterie {batterySaver ? 'ON' : 'OFF'}
+              </Text>
             </TouchableOpacity>
           )}
-          {status === 'running' && (<>
-            <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.amber }]} onPress={handlePause}>
-              <Text style={s.ctrlBtnText}>⏸ Pause</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.red }]} onPress={handleStop}>
-              <Text style={s.ctrlBtnText}>⏹ Terminer</Text>
-            </TouchableOpacity>
-          </>)}
-          {status === 'paused' && (<>
-            <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.green }]} onPress={handleResume}>
-              <Text style={s.ctrlBtnText}>▶ Reprendre</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.ctrlBtn, { backgroundColor: t.red }]} onPress={handleStop}>
-              <Text style={s.ctrlBtnText}>⏹ Terminer</Text>
-            </TouchableOpacity>
-          </>)}
         </View>
+      )}
 
-        {/* Battery saver toggle (only visible while running) */}
-        {status !== 'idle' && (
-          <TouchableOpacity
-            style={[s.saverBtn, batterySaver && s.saverBtnActive]}
-            onPress={toggleBatterySaver}
-          >
-            <Text style={[s.saverBtnText, batterySaver && s.saverBtnTextActive]}>
-              🔋 Mode économie batterie {batterySaver ? 'ON (GPS 1/5s)' : 'OFF (GPS 1/2s)'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </ScrollView>
+      {tab === 'stats' && (
+        <ScrollView style={s.panel} contentContainerStyle={s.panelContent}>
+          <Text style={s.timer}>{stats ? formatDuration(stats.durationSec) : '00:00:00'}</Text>
+          {etaText && <View style={s.etaRow}><Text style={s.etaText}>🏁 {etaText}</Text></View>}
+
+          {aiPhases.length > 0 && status === 'running' && (() => {
+            const phase = getCurrentPhase(aiPhases, progressM / 1000)
+            if (!phase) return null
+            return (
+              <View style={s.phaseCard}>
+                <Text style={s.phaseLabel}>🎯 {phase.label}</Text>
+                {phase.target ? <Text style={s.phaseTarget}>{phase.target}</Text> : null}
+                <Text style={s.phaseKm}>km {phase.fromKm.toFixed(1)} → {phase.toKm.toFixed(1)}</Text>
+              </View>
+            )
+          })()}
+
+          <View style={s.statsGrid}>
+            <StatBox label="Distance"  value={stats ? stats.distanceKm.toFixed(2) : '0.00'} unit=" km"   t={t} />
+            <StatBox label="Vitesse"   value={stats ? stats.avgSpeedKmh.toFixed(1) : '0.0'}  unit=" km/h" t={t} />
+            <StatBox label="Vit. max"  value={stats ? stats.maxSpeedKmh.toFixed(1) : '0.0'}  unit=" km/h" t={t} />
+            <StatBox label="Dénivelé +" value={stats ? stats.elevationGainM.toFixed(0) : '0'} unit=" m"  t={t} />
+            <StatBox label="Calories"  value={stats ? String(stats.caloriesBurned) : '0'}    unit=" kcal" t={t} />
+            {ble.bpm      !== null && <StatBox label="Fréq. cardiaque" value={String(ble.bpm)}      unit=" bpm"   t={t} />}
+            {ble.watts    !== null && <StatBox label="Puissance"       value={String(ble.watts)}    unit=" W"     t={t} />}
+            {ble.cadenceRpm !== null && <StatBox label="Cadence"       value={String(ble.cadenceRpm)} unit=" rpm" t={t} />}
+            {ble.speedKmh !== null && <StatBox label="Vit. capteur"   value={String(ble.speedKmh)} unit=" km/h"  t={t} />}
+          </View>
+
+          <Controls />
+          {status !== 'idle' && (
+            <TouchableOpacity style={[s.saverBtn, batterySaver && s.saverBtnActive]} onPress={toggleBatterySaver}>
+              <Text style={[s.saverBtnText, batterySaver && s.saverBtnTextActive]}>
+                🔋 Éco batterie {batterySaver ? 'ON (GPS 1/5s)' : 'OFF (GPS 1/2s)'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      )}
+
+      {tab === 'spotify' && (
+        <ScrollView style={s.panel} contentContainerStyle={s.panelContent}>
+          {!spotifyLinked ? (
+            <View style={s.spotifyEmpty}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>🎵</Text>
+              <Text style={s.spotifyEmptyText}>Connecte ton compte Spotify pour voir la musique en cours</Text>
+              <TouchableOpacity
+                style={[s.spotifyConnectBtn, spotifyLoading && { opacity: 0.6 }]}
+                onPress={handleSpotifyConnect}
+                disabled={spotifyLoading}
+              >
+                <Text style={s.spotifyConnectText}>{spotifyLoading ? 'Connexion…' : '🔗 Connecter Spotify'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : nowPlaying ? (
+            <View style={s.spotifyFull}>
+              {nowPlaying.albumArtUrl ? (
+                <Image source={{ uri: nowPlaying.albumArtUrl }} style={s.albumArtLarge} />
+              ) : (
+                <View style={[s.albumArtLarge, { backgroundColor: t.card, alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ fontSize: 48 }}>🎵</Text>
+                </View>
+              )}
+              <Text style={s.spotifyTrack} numberOfLines={2}>{nowPlaying.trackName}</Text>
+              <Text style={s.spotifyArtist}>{nowPlaying.artistName}</Text>
+              <View style={s.spotifyControls}>
+                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={() => { spotifyPrevious(); setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800) }}>
+                  <Text style={s.spotifyCtrlIcon}>⏮</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.spotifyCtrlBtn, s.spotifyCtrlBtnMain]} onPress={() => {
+                  if (nowPlaying.isPlaying) spotifyPause()
+                  else spotifyPlay()
+                  setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800)
+                }}>
+                  <Text style={[s.spotifyCtrlIcon, { fontSize: 28, color: '#fff' }]}>{nowPlaying.isPlaying ? '⏸' : '▶'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={() => { spotifyNext(); setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800) }}>
+                  <Text style={s.spotifyCtrlIcon}>⏭</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={s.spotifyEmpty}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>🎵</Text>
+              <Text style={s.spotifyEmptyText}>Lance Spotify sur ton téléphone pour voir la musique ici</Text>
+            </View>
+          )}
+          <Controls />
+        </ScrollView>
+      )}
     </View>
   )
 }
 
 const styles = (t: Theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: t.bg },
-  mapWrapper: { flex: 1, borderBottomWidth: 1, borderBottomColor: t.border },
-  map: { flex: 1 },
-  navBanner: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
-  navBannerTurn: { backgroundColor: 'rgba(37,99,235,0.92)' },
-  navBannerElev: { backgroundColor: 'rgba(234,88,12,0.90)' },
+  container:        { flex: 1, backgroundColor: t.bg },
+
+  // Map
+  mapWrapper:       { flex: 1 },
+  mapWrapperSmall:  { flex: 0, height: 140 },
+  navBanner:        { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  navBannerTurn:    { backgroundColor: 'rgba(37,99,235,0.92)' },
+  navBannerElev:    { backgroundColor: 'rgba(234,88,12,0.90)' },
   navBannerNutrition: { backgroundColor: 'rgba(22,163,74,0.90)' },
-  navBannerOffRoute: { backgroundColor: 'rgba(220,38,38,0.95)' },
-  navBannerEmoji: { fontSize: 22 },
-  navBannerText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
-  panel: { maxHeight: 400 },
-  panelContent: { padding: 16 },
-  timer: { fontSize: 48, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: t.text, marginBottom: 8 },
-  etaRow: { alignItems: 'center', marginBottom: 12 },
-  etaText: { fontSize: 13, color: t.textSub, fontWeight: '600' },
-  phaseCard: { backgroundColor: '#7c3aed22', borderRadius: 12, borderWidth: 1, borderColor: '#7c3aed66', padding: 12, marginBottom: 12 },
-  phaseLabel: { fontSize: 13, fontWeight: '700', color: '#a78bfa', marginBottom: 3 },
-  phaseTarget: { fontSize: 12, color: t.text, marginBottom: 3, lineHeight: 18 },
-  phaseKm: { fontSize: 11, color: t.textMuted },
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  bleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  bleChip: { flex: 1, backgroundColor: t.card, borderRadius: 20, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: t.blue },
-  bleChipOff: { borderColor: t.border },
-  bleChipText: { fontSize: 13, fontWeight: '600', color: t.text },
-  spotifyCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: t.card, borderRadius: 12, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#1db954' },
-  albumArt: { width: 44, height: 44, borderRadius: 6 },
-  spotifyTrack: { fontSize: 13, fontWeight: '700', color: t.text },
-  spotifyArtist: { fontSize: 12, color: t.textSub },
-  spotifyTempo: { fontSize: 11, color: '#1db954', marginTop: 2 },
-  controls: { flexDirection: 'row', gap: 12, marginBottom: 10 },
-  ctrlBtn: { flex: 1, borderRadius: 14, padding: 16, alignItems: 'center' },
-  ctrlBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  saverBtn: { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center', borderWidth: 1, borderColor: t.border, backgroundColor: t.card },
-  saverBtnActive: { borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.12)' },
-  saverBtnText: { fontSize: 12, color: t.textMuted },
+  navBannerOffRoute:{ backgroundColor: 'rgba(220,38,38,0.95)' },
+  navBannerEmoji:   { fontSize: 22 },
+  navBannerText:    { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
+
+  // Map overlay stats (tab=map)
+  mapOverlay:       { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.55)', padding: 10 },
+  mapTimer:         { color: '#fff', fontSize: 28, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, marginBottom: 6 },
+  mapStatRow:       { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
+  mapStat:          { alignItems: 'center', paddingHorizontal: 8 },
+  mapStatVal:       { color: '#fff', fontSize: 16, fontWeight: '700' },
+  mapStatLabel:     { color: 'rgba(255,255,255,0.7)', fontSize: 10 },
+  mapStatDivider:   { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.3)' },
+  mapEta:           { color: 'rgba(255,255,255,0.8)', fontSize: 11, textAlign: 'center', marginTop: 4 },
+
+  // Tab bar
+  tabBar:           { flexDirection: 'row', backgroundColor: t.card, borderTopWidth: 1, borderTopColor: t.border },
+  tab:              { flex: 1, alignItems: 'center', paddingVertical: 8, gap: 2 },
+  tabActive:        { borderTopWidth: 2, borderTopColor: t.blue },
+  tabIcon:          { fontSize: 18 },
+  tabLabel:         { fontSize: 10, color: t.textMuted },
+  tabLabelActive:   { color: t.blue, fontWeight: '600' },
+
+  // Panels
+  panelControls:    { padding: 16 },
+  panel:            { flex: 1 },
+  panelContent:     { padding: 16 },
+
+  timer:            { fontSize: 44, fontWeight: 'bold', textAlign: 'center', letterSpacing: 2, color: t.text, marginBottom: 8 },
+  etaRow:           { alignItems: 'center', marginBottom: 12 },
+  etaText:          { fontSize: 13, color: t.textSub, fontWeight: '600' },
+  phaseCard:        { backgroundColor: '#7c3aed22', borderRadius: 12, borderWidth: 1, borderColor: '#7c3aed66', padding: 12, marginBottom: 12 },
+  phaseLabel:       { fontSize: 13, fontWeight: '700', color: '#a78bfa', marginBottom: 3 },
+  phaseTarget:      { fontSize: 12, color: t.text, marginBottom: 3, lineHeight: 18 },
+  phaseKm:          { fontSize: 11, color: t.textMuted },
+  statsGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+
+  controls:         { flexDirection: 'row', gap: 12, marginBottom: 10 },
+  ctrlBtn:          { flex: 1, borderRadius: 14, padding: 16, alignItems: 'center' },
+  ctrlBtnText:      { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  saverBtn:         { borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, alignItems: 'center', borderWidth: 1, borderColor: t.border, backgroundColor: t.card },
+  saverBtnActive:   { borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,0.12)' },
+  saverBtnText:     { fontSize: 12, color: t.textMuted },
   saverBtnTextActive: { color: '#16a34a', fontWeight: '600' },
+
+  // Spotify
+  spotifyFull:      { alignItems: 'center', paddingVertical: 20, gap: 12 },
+  albumArtLarge:    { width: 180, height: 180, borderRadius: 16, marginBottom: 8 },
+  spotifyTrack:     { fontSize: 20, fontWeight: '700', color: t.text, textAlign: 'center' },
+  spotifyArtist:    { fontSize: 15, color: t.textSub, textAlign: 'center' },
+  spotifyTempo:     { fontSize: 13, color: '#1db954', fontWeight: '600' },
+  spotifyControls:      { flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 20 },
+  spotifyCtrlBtn:       { width: 56, height: 56, borderRadius: 28, backgroundColor: t.card, alignItems: 'center', justifyContent: 'center' },
+  spotifyCtrlBtnMain:   { width: 68, height: 68, borderRadius: 34, backgroundColor: '#1db954' },
+  spotifyCtrlIcon:      { fontSize: 22, color: t.text },
+  spotifyHint:          { fontSize: 12, color: t.textMuted, textAlign: 'center', marginTop: 8 },
+  spotifyEmpty:      { alignItems: 'center', paddingVertical: 40 },
+  spotifyEmptyText:  { color: t.textMuted, textAlign: 'center', fontSize: 14, lineHeight: 22, marginBottom: 20 },
+  spotifyConnectBtn: { backgroundColor: '#1db954', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 28, marginTop: 4 },
+  spotifyConnectText:{ color: '#fff', fontWeight: 'bold', fontSize: 15 },
 })

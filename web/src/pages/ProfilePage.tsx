@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { useAuthStore } from '@/stores/authStore'
@@ -22,17 +22,6 @@ export default function ProfilePage() {
     goal: user?.goal ?? '',
   })
   const [saved, setSaved] = useState(false)
-  const [spotifyLinked, setSpotifyLinked] = useState(false)
-  const [spotifyLoading, setSpotifyLoading] = useState(false)
-
-  useEffect(() => {
-    api.get('/spotify/status').then(r => setSpotifyLinked(r.data.linked)).catch(() => {})
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('spotify') === 'linked') {
-      setSpotifyLinked(true)
-      window.history.replaceState({}, '', window.location.pathname)
-    }
-  }, [])
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () => api.put('/auth/me', {
@@ -49,21 +38,6 @@ export default function ProfilePage() {
       setTimeout(() => setSaved(false), 2000)
     },
   })
-
-  async function handleSpotifyConnect() {
-    setSpotifyLoading(true)
-    try {
-      const res = await api.get('/spotify/auth-url')
-      window.location.href = res.data.url
-    } finally {
-      setSpotifyLoading(false)
-    }
-  }
-
-  async function handleSpotifyUnlink() {
-    await api.delete('/spotify/unlink')
-    setSpotifyLinked(false)
-  }
 
   const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '') => (
     <div>
@@ -157,30 +131,6 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* Spotify */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center text-xl">🎵</div>
-          <div>
-            <p className="font-semibold text-gray-900 dark:text-white">Spotify</p>
-            <p className="text-xs text-gray-400 dark:text-slate-500">
-              {spotifyLinked ? 'Compte connecté — suivi musical actif' : 'Suivez votre musique pendant les sorties'}
-            </p>
-          </div>
-          {spotifyLinked && (
-            <span className="ml-auto text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full font-medium">Connecté</span>
-          )}
-        </div>
-        {spotifyLinked ? (
-          <button onClick={handleSpotifyUnlink} className="w-full border dark:border-slate-600 text-gray-600 dark:text-slate-400 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 dark:hover:bg-slate-700">
-            Déconnecter Spotify
-          </button>
-        ) : (
-          <button onClick={handleSpotifyConnect} disabled={spotifyLoading} className="w-full bg-[#1db954] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1aa34a] disabled:opacity-50">
-            {spotifyLoading ? 'Redirection...' : 'Connecter mon compte Spotify'}
-          </button>
-        )}
-      </div>
     </div>
   )
 }
