@@ -38,6 +38,7 @@
     },
     "plugins": [
       "expo-sqlite",
+      "react-native-ble-plx",
       [
         "expo-location",
         {

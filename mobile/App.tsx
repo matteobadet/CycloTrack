@@ -15,6 +15,7 @@ import RideSummaryScreen from './src/screens/RideSummaryScreen'
 import RideDetailScreen from './src/screens/RideDetailScreen'
 import PlannedRidesScreen from './src/screens/PlannedRidesScreen'
 import PlanDetailScreen from './src/screens/PlanDetailScreen'
+import SensorScreen from './src/screens/SensorScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -43,6 +44,7 @@ export default function App() {
             <Stack.Screen name="RideDetail" component={RideDetailScreen} options={{ headerShown: true, title: 'Détail de la sortie' }} />
             <Stack.Screen name="PlannedRides" component={PlannedRidesScreen} options={{ headerShown: true, title: 'Sorties planifiées' }} />
             <Stack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ headerShown: true, title: 'Ma planification' }} />
+            <Stack.Screen name="Sensors" component={SensorScreen} options={{ headerShown: true, title: 'Capteurs BLE' }} />
           </>
         ) : (
           <>

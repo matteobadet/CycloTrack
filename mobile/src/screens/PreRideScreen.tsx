@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Alert } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import { bleService } from '../services/bleService'
 import { useTheme, Theme } from '../theme'
 
@@ -16,19 +17,16 @@ export default function PreRideScreen({ navigation, route: navRoute }: any) {
   const s = styles(t)
   const [feel, setFeel] = useState<number | null>(null)
   const [comment, setComment] = useState('')
-  const [bleStatus, setBleStatus] = useState<string | null>(null)
-  const [scanningBle, setScanningBle] = useState(false)
+  const [hrConnected, setHrConnected]       = useState(bleService.isHrConnected)
+  const [powerConnected, setPowerConnected] = useState(bleService.isPowerConnected)
   const plannedRideId: string | undefined = navRoute?.params?.plannedRideId
-  const plannedTitle: string | undefined = navRoute?.params?.plannedTitle
+  const plannedTitle: string | undefined  = navRoute?.params?.plannedTitle
 
-  async function startBleScan() {
-    const ok = await bleService.requestPermissions()
-    if (!ok) { Alert.alert('Permission BLE requise'); return }
-    setScanningBle(true)
-    setBleStatus('Recherche des capteurs...')
-    bleService.startScan(() => {}, (name) => setBleStatus(`Connecté : ${name}`))
-    setTimeout(() => setScanningBle(false), 10000)
-  }
+  // Refresh BLE status each time the user comes back from SensorScreen
+  useFocusEffect(useCallback(() => {
+    setHrConnected(bleService.isHrConnected)
+    setPowerConnected(bleService.isPowerConnected)
+  }, []))
 
   function startRide() {
     navigation.navigate('Tracking', { feelBefore: feel, commentBefore: comment, plannedRideId })
@@ -71,18 +69,19 @@ export default function PreRideScreen({ navigation, route: navRoute }: any) {
       <Text style={s.sectionLabel}>Capteurs BLE</Text>
       <View style={s.bleRow}>
         <View style={s.sensor}>
-          <Text style={s.sensorIcon}>{bleService.isPowerConnected ? '🟢' : '⚫'}</Text>
+          <Text style={s.sensorIcon}>{powerConnected ? '🟢' : '⚫'}</Text>
           <Text style={s.sensorLabel}>CYCPLUS M1{'\n'}(Watts + Cadence)</Text>
         </View>
         <View style={s.sensor}>
-          <Text style={s.sensorIcon}>{bleService.isHrConnected ? '🟢' : '⚫'}</Text>
+          <Text style={s.sensorIcon}>{hrConnected ? '🟢' : '⚫'}</Text>
           <Text style={s.sensorLabel}>CYCPLUS H2PRO{'\n'}(FC)</Text>
         </View>
       </View>
-      <TouchableOpacity style={s.bleBtn} onPress={startBleScan} disabled={scanningBle}>
-        <Text style={s.bleBtnText}>{scanningBle ? 'Recherche...' : 'Rechercher les capteurs'}</Text>
+      <TouchableOpacity style={s.bleBtn} onPress={() => navigation.navigate('Sensors')}>
+        <Text style={s.bleBtnText}>
+          {hrConnected || powerConnected ? '⚙️ Gérer les capteurs' : '🔍 Connecter les capteurs'}
+        </Text>
       </TouchableOpacity>
-      {bleStatus && <Text style={s.bleStatus}>{bleStatus}</Text>}
 
       <TouchableOpacity style={s.startBtn} onPress={startRide}>
         <Text style={s.startBtnText}>🚴 Démarrer la sortie</Text>
