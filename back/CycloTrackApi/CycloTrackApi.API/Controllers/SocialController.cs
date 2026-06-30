@@ -24,6 +24,8 @@ public class SocialController(AppDbContext db, IRideRepository rideRepo) : Contr
             .Select(f => f.FollowedId)
             .ToListAsync();
 
+        followedIds.Add(UserId);
+
         var rides = await rideRepo.GetFeedAsync(followedIds, page, pageSize);
         var rideIds = rides.Select(r => r.Id).ToList();
 
