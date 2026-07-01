@@ -118,13 +118,22 @@ export async function unlinkSpotify(): Promise<void> {
 }
 
 // ── Playback controls ─────────────────────────────────────────────────────────
-async function playerAction(method: 'PUT' | 'POST', endpoint: string) {
+// Returns 'ok' | 'no_token' | 'scope_error' | 'error'
+async function playerAction(method: 'PUT' | 'POST', endpoint: string): Promise<string> {
   const token = await getValidAccessToken()
-  if (!token) return
-  await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
-    method,
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  if (!token) return 'no_token'
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.status === 403) return 'scope_error'
+    if (res.status === 404) return 'no_device' // no active player
+    if (!res.ok) return 'error'
+    return 'ok'
+  } catch {
+    return 'error'
+  }
 }
 
 export const spotifyPlay     = () => playerAction('PUT',  'play')

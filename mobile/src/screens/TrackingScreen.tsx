@@ -75,6 +75,7 @@ function formatEta(remainingM: number, speedKmh: number): string {
 }
 
 import { api } from '../lib/api'
+import { useAuthStore } from '../stores/authStore'
 import { useTheme, Theme } from '../theme'
 import LiveMap from '../components/LiveMap'
 
@@ -145,6 +146,18 @@ export default function TrackingScreen({ route, navigation }: any) {
       deactivateKeepAwake()
     }
     return () => { deactivateKeepAwake() }
+  }, [status])
+
+  // Proactive token refresh every 10 min during ride to prevent expiry mid-sortie
+  useEffect(() => {
+    if (status !== 'running') return
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.post('/auth/refresh')
+        useAuthStore.getState().setToken(data.accessToken)
+      } catch {}
+    }, 10 * 60 * 1000)
+    return () => clearInterval(interval)
   }, [status])
 
   // Load planned ride data (route + steps + elevation)
@@ -283,7 +296,7 @@ export default function TrackingScreen({ route, navigation }: any) {
           } else {
             const localId = `local-${Date.now()}`
             await saveRideLocally({ localId, startedAt, endedAt: now, stats: finalStats, points: finalPoints, feelBefore, commentBefore })
-            await syncPendingRides().catch(() => null)
+            await syncPendingRides()
             finalRideId = localId
           }
 
@@ -527,17 +540,25 @@ export default function TrackingScreen({ route, navigation }: any) {
               <Text style={s.spotifyTrack} numberOfLines={2}>{nowPlaying.trackName}</Text>
               <Text style={s.spotifyArtist}>{nowPlaying.artistName}</Text>
               <View style={s.spotifyControls}>
-                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={() => { spotifyPrevious(); setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800) }}>
+                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={async () => {
+                  const r = await spotifyPrevious()
+                  if (r === 'scope_error') Alert.alert('Spotify', 'Permissions insuffisantes. Reconnecte Spotify depuis l\'accueil.')
+                  else setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800)
+                }}>
                   <Text style={s.spotifyCtrlIcon}>⏮</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[s.spotifyCtrlBtn, s.spotifyCtrlBtnMain]} onPress={() => {
-                  if (nowPlaying.isPlaying) spotifyPause()
-                  else spotifyPlay()
-                  setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800)
+                <TouchableOpacity style={[s.spotifyCtrlBtn, s.spotifyCtrlBtnMain]} onPress={async () => {
+                  const r = nowPlaying.isPlaying ? await spotifyPause() : await spotifyPlay()
+                  if (r === 'scope_error') Alert.alert('Spotify', 'Permissions insuffisantes. Reconnecte Spotify depuis l\'accueil.')
+                  else setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800)
                 }}>
                   <Text style={[s.spotifyCtrlIcon, { fontSize: 28, color: '#fff' }]}>{nowPlaying.isPlaying ? '⏸' : '▶'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={() => { spotifyNext(); setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800) }}>
+                <TouchableOpacity style={s.spotifyCtrlBtn} onPress={async () => {
+                  const r = await spotifyNext()
+                  if (r === 'scope_error') Alert.alert('Spotify', 'Permissions insuffisantes. Reconnecte Spotify depuis l\'accueil.')
+                  else setTimeout(() => startPollingForRide(serverRideIdRef.current ?? 'local'), 800)
+                }}>
                   <Text style={s.spotifyCtrlIcon}>⏭</Text>
                 </TouchableOpacity>
               </View>

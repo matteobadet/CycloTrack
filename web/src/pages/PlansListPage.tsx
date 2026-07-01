@@ -9,6 +9,7 @@ interface PlannedRide {
   plannedAt: string | null
   distanceKm: number
   elevationGainM: number
+  elevationLossM: number
   estimatedDurationMin: number
   isCompleted: boolean
   createdAt: string
@@ -110,6 +111,7 @@ export default function PlansListPage() {
                         <div className="flex gap-4 mt-2 text-sm text-gray-500 dark:text-slate-400">
                           <span>{p.distanceKm.toFixed(1)} km</span>
                           <span>↑ {p.elevationGainM.toFixed(0)} m</span>
+                          <span>↓ {p.elevationLossM.toFixed(0)} m</span>
                           <span>{Math.floor(p.estimatedDurationMin / 60)}h{String(p.estimatedDurationMin % 60).padStart(2, '0')}</span>
                         </div>
                       </div>
@@ -154,6 +156,8 @@ export default function PlansListPage() {
                       <div className="flex gap-3 text-sm text-gray-400 dark:text-slate-500 shrink-0">
                         <span>{p.distanceKm.toFixed(1)} km</span>
                         <span>↑ {p.elevationGainM.toFixed(0)} m</span>
+                        <span>↓ {p.elevationLossM.toFixed(0)} m</span>
+                        <span>{Math.floor(p.estimatedDurationMin / 60)}h{String(p.estimatedDurationMin % 60).padStart(2, '0')}</span>
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); deletePlan(p.id) }}
