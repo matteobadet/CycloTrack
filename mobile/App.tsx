@@ -3,7 +3,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { StatusBar } from 'expo-status-bar'
 import { useAuthStore } from './src/stores/authStore'
-import { initDb } from './src/services/offlineStore'
+import { initDb, syncPendingRides, getPendingCount } from './src/services/offlineStore'
 import { useThemeStore, useIsDark } from './src/theme'
 
 import LoginScreen from './src/screens/LoginScreen'
@@ -30,6 +30,13 @@ export default function App() {
     loadFromStorage()
     loadOverride()
   }, [])
+
+  // Sync offline rides as soon as the user is logged in
+  useEffect(() => {
+    if (!user) return
+    const pending = getPendingCount()
+    if (pending > 0) syncPendingRides().catch(() => {})
+  }, [user])
 
   return (
     <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>

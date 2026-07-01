@@ -12,7 +12,7 @@ namespace CycloTrackApi.API.Controllers;
 [Authorize]
 public class NotificationsController(AppDbContext db) : ControllerBase
 {
-    Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    Guid UserId => Guid.Parse(User.FindFirstValue("sub")!);
 
     [HttpGet]
     public async Task<IActionResult> GetAll()

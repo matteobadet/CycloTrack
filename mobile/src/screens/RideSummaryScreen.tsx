@@ -42,13 +42,16 @@ export default function RideSummaryScreen({ route, navigation }: any) {
     if (plannedRideId) api.patch(`/plan/${plannedRideId}/complete`).catch(() => {})
   }, [plannedRideId])
 
+  const isLocalRide = rideId?.startsWith('local-')
+
   async function handleSaveFeedback() {
+    if (isLocalRide) {
+      Alert.alert('Sortie hors ligne', 'Cette sortie sera synchronisée au prochain démarrage de l\'app.')
+      return
+    }
     setSavingFeedback(true)
     try {
-      const listRes = await api.get('/rides?pageSize=1')
-      const latestRide = listRes.data[0]
-      if (!latestRide) { Alert.alert('Sortie pas encore synchronisée', 'Reconnectez-vous au réseau et réessayez.'); return }
-      await api.patch(`/rides/${latestRide.id}/feedback`, { feelAfter, commentAfter: commentAfter.trim() || null })
+      await api.patch(`/rides/${rideId}/feedback`, { feelAfter, commentAfter: commentAfter.trim() || null })
       setFeedbackSaved(true)
     } catch {
       Alert.alert('Erreur', 'Impossible de sauvegarder le feedback.')
@@ -58,12 +61,13 @@ export default function RideSummaryScreen({ route, navigation }: any) {
   }
 
   async function handleAiAnalysis() {
+    if (isLocalRide) {
+      Alert.alert('Sortie hors ligne', 'Cette sortie sera synchronisée au prochain démarrage de l\'app.')
+      return
+    }
     setLoadingAi(true)
     try {
-      const listRes = await api.get('/rides?pageSize=1')
-      const latestRide = listRes.data[0]
-      if (!latestRide) { Alert.alert('Sortie pas encore synchronisée', 'Reconnectez-vous au réseau et réessayez.'); return }
-      const { data } = await api.post(`/rides/${latestRide.id}/analyze`)
+      const { data } = await api.post(`/rides/${rideId}/analyze`)
       setAiAnalysis(data.analysis)
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'Impossible d\'obtenir le bilan.'
